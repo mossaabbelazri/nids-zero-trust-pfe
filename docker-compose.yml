@@ -1,16 +1,22 @@
+version: '3.8'
+
 services:
   jenkins:
-    image: jenkins/jenkins:lts
+    # MODIFICATION ICI : On remplace "image:" par le bloc "build" pour injecter la commande docker
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
     container_name: jenkins_pfe
+    user: root
     ports:
       - "8080:8080"
     volumes:
       - jenkins_home:/var/jenkins_home
-      # On donne à Jenkins l'accès à Docker pour qu'il puisse construire ton image NIDS
+      # On donne à Jenkins l'accès au moteur Docker de ta machine
       - /var/run/docker.sock:/var/run/docker.sock
 
   vault:
-    # Utilisation du dépôt officiel HashiCorp
+    # Utilisation du dépôt officiel HashiCorp (Ta modification gardée)
     image: hashicorp/vault:latest
     container_name: vault_pfe
     ports:
@@ -21,17 +27,16 @@ services:
       - IPC_LOCK
 
   mlflow:
-    # Utilisation de l'image sécurisée que nous avons validée avec Trivy
+    # Utilisation de l'image sécurisée (Ta modification gardée)
     image: python:3.10-slim-bookworm
     container_name: mlflow_pfe
     ports:
       - "5000:5000"
-    # Installation des versions sécurisées de MLflow et Protobuf
+    # Installation des versions sécurisées (Ta modification gardée)
     command: >
       bash -c "pip install --no-cache-dir mlflow>=3.11.1 protobuf>=5.29.6 &&
       mlflow server --host 0.0.0.0 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /mlruns"
     volumes:
-      # Ce volume garantit que tes modèles ne sont pas perdus si le conteneur redémarre
       - mlflow_data:/mlruns
 
 volumes:

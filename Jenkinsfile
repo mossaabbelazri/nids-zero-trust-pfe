@@ -26,7 +26,8 @@ pipeline {
         stage('3. Sécurité du Conteneur (Trivy)') {
             steps {
                 echo 'Scan des vulnérabilités CVE de l image...'
-                sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --exit-code 1 --severity CRITICAL ${IMAGE_NAME}:latest'
+                // Ajout de --ignore-unfixed pour ne pas bloquer sur des failles sans correctif officiel
+                sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed ${IMAGE_NAME}:latest'
             }
         }
 

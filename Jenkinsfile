@@ -42,10 +42,10 @@ pipeline {
             steps {
                 echo 'Récupération des secrets via HashiCorp Vault...'
                 
-                // Correction de la syntaxe : utilisation du bloc "configuration"
+                // Utilisation de "vault" pur pour respecter la norme DNS et satisfaire Java
                 withVault(
                     configuration: [
-                        vaultUrl: 'http://vault_pfe:8200',
+                        vaultUrl: 'http://vault:8200',
                         vaultCredentialId: 'vault-token-id'
                     ],
                     vaultSecrets: [
@@ -62,7 +62,7 @@ pipeline {
                         echo 'Création du cluster GKE privé...'
                         sh 'terraform init'
                         
-                        // Ligne de test
+                        // Ligne de test ultime
                         sh 'echo "Le secret récupéré est : ${GOOGLE_CREDENTIALS}"'
                     }
                 }

@@ -1,0 +1,39 @@
+services:
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins_pfe
+    ports:
+      - "8080:8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      # On donne à Jenkins l'accès à Docker pour qu'il puisse construire ton image NIDS
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  vault:
+    # Utilisation du dépôt officiel HashiCorp
+    image: hashicorp/vault:latest
+    container_name: vault_pfe
+    ports:
+      - "8200:8200"
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=mon_super_token_secret
+    cap_add:
+      - IPC_LOCK
+
+  mlflow:
+    # Utilisation de l'image sécurisée que nous avons validée avec Trivy
+    image: python:3.10-slim-bookworm
+    container_name: mlflow_pfe
+    ports:
+      - "5000:5000"
+    # Installation des versions sécurisées de MLflow et Protobuf
+    command: >
+      bash -c "pip install --no-cache-dir mlflow>=3.11.1 protobuf>=5.29.6 &&
+      mlflow server --host 0.0.0.0 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /mlruns"
+    volumes:
+      # Ce volume garantit que tes modèles ne sont pas perdus si le conteneur redémarre
+      - mlflow_data:/mlruns
+
+volumes:
+  jenkins_home:
+  mlflow_data:

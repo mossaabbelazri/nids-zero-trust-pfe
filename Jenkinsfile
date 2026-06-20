@@ -42,24 +42,27 @@ pipeline {
             steps {
                 echo 'Récupération des secrets via HashiCorp Vault...'
                 
-                // On force la configuration (URL, Token, et Moteur KV v2) directement dans le code
+                // Correction de la syntaxe : utilisation du bloc "configuration"
                 withVault(
-                    vaultUrl: 'http://vault_pfe:8200', 
-                    vaultCredentialId: 'vault-token-id', 
+                    configuration: [
+                        vaultUrl: 'http://vault_pfe:8200',
+                        vaultCredentialId: 'vault-token-id'
+                    ],
                     vaultSecrets: [
-                        [path: 'secret/gcp', engineVersion: 2, secretValues: [
-                            [envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']
-                        ]]
+                        [
+                            path: 'secret/gcp', 
+                            engineVersion: 2, 
+                            secretValues: [
+                                [envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']
+                            ]
+                        ]
                     ]
                 ) {
                     dir('terraform') {
                         echo 'Création du cluster GKE privé...'
-                        // On commente temporairement 'terraform apply' pour vérifier juste la connexion Vault
                         sh 'terraform init'
-                        // sh 'terraform apply -auto-approve'
                         
-                        // Ligne de test pour prouver que le secret est bien injecté
-                        // (Dans la vraie vie, on ne fait JAMAIS ça car ça expose le secret)
+                        // Ligne de test
                         sh 'echo "Le secret récupéré est : ${GOOGLE_CREDENTIALS}"'
                     }
                 }

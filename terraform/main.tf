@@ -2,8 +2,8 @@ resource "google_container_cluster" "primary" {
   name     = "nids-zero-trust-cluster"
   location = "europe-west1-b" # Utilise une ZONE précise plutôt qu'une REGION entière pour économiser les nœuds
 
-  # Configuration du mode Standard ultra-léger
-  initial_node_count = 1 # 1 seul nœud suffit largement pour tes tests et ton budget quota
+# Configuration du mode Standard ultra-léger
+  initial_node_count = 2 # On passe à 2 nœuds pour donner de l'espace à Istio
 
   node_config {
     machine_type = "e2-medium" # Machine standard et économique

@@ -167,6 +167,7 @@ EOF
                 }
             }
         }
+    }
 
     post {
         failure {

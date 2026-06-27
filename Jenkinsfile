@@ -68,18 +68,21 @@ pipeline {
                         
                         echo "Le cluster GKE est créé ! Configuration de kubectl..."
                         
-                        // CORRECTION : Injection directe dans l'environnement d'exécution du conteneur
+                        // CORRECTION : Export direct du fichier pour la CLI gcloud
                         sh '''
                             echo "$GOOGLE_CREDENTIALS" > /tmp/gcp_adc.json
-                            export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gtmp/gcp_adc.json
                             
-                            # Authentification transparente de la CLI gcloud avec les ADC
-                            gcloud auth application-default activate
+                            # On indique explicitement à gcloud d'utiliser ce fichier de jetons
+                            export CLOUDSDK_AUTH_CREDENTIAL_FILE=/tmp/gcp_adc.json
+                            export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json
                             
-                            # Récupération sécurisée des configurations du cluster GKE
+                            # Récupération des accès GKE (gcloud va lire le JSON tout seul)
                             gcloud container clusters get-credentials nids-zero-trust-cluster --zone europe-west1-b --project zero-trust-mlops-pfe
                             
-                            # Nettoyage strict après obtention des accès Kubernetes
+                            # Test de connexion rapide pour valider que kubectl répond
+                            kubectl cluster-info
+                            
+                            # Nettoyage de sécurité
                             rm -f /tmp/gcp_adc.json
                         '''
                         }

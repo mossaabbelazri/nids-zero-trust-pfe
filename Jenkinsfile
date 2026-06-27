@@ -110,12 +110,63 @@ with open('/tmp/gcp_token', 'w') as f:
         }
         stage('6. Déploiement du Modèle NIDS sur GKE') {
             steps {
-                echo 'Déploiement de l IA sur le cluster...'
-                // Commandes kubectl pour lancer le conteneur sur les serveurs créés
-                sh 'echo "Modèle déployé avec succès sur Kubernetes !"'
+                echo 'Initialisation et sécurisation du réseau via Istio...'
+                
+                // On réutilise les variables d'environnement d'authentification définies à l'étape précédente
+                withVault(
+                    configuration: [vaultUrl: 'http://vault:8200', vaultCredentialId: 'vault-token-id'],
+                    vaultSecrets: [[path: 'secret/gcp', engineVersion: 2, secretValues: [[envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']]]]
+                ) {
+                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
+                        sh '''
+                            echo "$GOOGLE_CREDENTIALS" > /tmp/gcp_adc.json
+                            export CLOUDSDK_AUTH_CREDENTIAL_FILE=/var/jenkins_home/.config/gcloud/credentials.db # Optionnel selon profil
+                            
+                            # Récupération des accès Kubernetes
+                            gcloud config set auth/access_token_file /tmp/gcp_token 2>/dev/null || true
+                            gcloud container clusters get-credentials nids-zero-trust-cluster --zone europe-west1-b --project zero-trust-mlops-pfe
+                            
+                            # 1. Téléchargement et installation d'Istio si non présent
+                            if ! kubectl get ns istio-system > /dev/null 2>&1; then
+                                echo "Téléchargement d'Istio..."
+                                curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.20.0 sh -
+                                cd istio-1.20.0
+                                export PATH=$PWD/bin:$PATH
+                                
+                                echo "Installation du profil minimal d'Istio..."
+                                ./bin/istioctl install --set profile=minimal -y
+                                cd ..
+                            fi
+                            
+                            # 2. Activation de l'injection automatique de sidecars Istio sur le namespace 'default'
+                            kubectl label namespace default istio-injection=enabled --overwrite
+                            
+                            # 3. Application de la politique de chiffrement mTLS Stricte (Zero-Trust)
+                            kubectl apply -f - <<EOF
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: default
+spec:
+  mtls:
+    mode: STRICT
+EOF
+
+                            # 4. Déploiement de l'application d'IA avec ses fichiers de configuration manifestes
+                            echo "Déploiement du modèle d'IA..."
+                            kubectl apply -f k8s/
+                            
+                            # Vérification de l'état du déploiement
+                            kubectl rollout status deployment/nids-model-deployment --timeout=90s
+                            
+                            # Nettoyage
+                            rm -f /tmp/gcp_adc.json
+                        '''
+                    }
+                }
             }
         }
-    }
 
     post {
         failure {

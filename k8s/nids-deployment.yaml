@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nids-model-deployment
+  namespace: default
+  labels:
+    app: nids-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nids-ai
+  template:
+    metadata:
+      labels:
+        app: nids-ai
+    spec:
+      containers:
+        - name: nids-container
+          image: gcr.io/zero-trust-mlops-pfe/nids-model:latest # Ton image d'IA scorée par Trivy
+          ports:
+            - containerPort: 5000 # Le port exposé par ton API (Flask/FastAPI)
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nids-model-service
+  namespace: default
+spec:
+  type: ClusterIP # ClusterIP pour qu'il reste privé, Istio gérera l'entrée
+  selector:
+    app: nids-ai
+  ports:
+    - port: 80
+      targetPort: 5000

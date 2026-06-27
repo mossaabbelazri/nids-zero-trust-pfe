@@ -57,27 +57,25 @@ pipeline {
                         ]
                     ]
                 ) {
-                    dir('terraform') {
-                        echo 'Création du cluster GKE privé...'
-                        
-                        // Définition du projet de facturation pour le quota
-                        env.GOOGLE_BILLING_PROJECT = "zero-trust-mlops-pfe"
-                        
-                        sh 'terraform init'
-                        
-                        // On lance le vrai déploiement sur Google Cloud !
-                        sh 'terraform apply -auto-approve'
-                        
-                        echo "Le cluster GKE est créé ! Configuration de kubectl..."
-                        
-                        // Configuration de gcloud avec le jeton fourni par Vault
-                        sh 'gcloud auth login --cred-file=$GOOGLE_CREDENTIALS'
-                        sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --region europe-west1 --project zero-trust-mlops-pfe'
+                    // Utilisation de withEnv pour injecter proprement le projet de facturation GCP
+                    withEnv(["GOOGLE_BILLING_PROJECT=zero-trust-mlops-pfe"]) {
+                        dir('terraform') {
+                            echo 'Création du cluster GKE privé...'
+                            sh 'terraform init'
+                            
+                            // Lancement du déploiement réel sur Google Cloud
+                            sh 'terraform apply -auto-approve'
+                            
+                            echo "Le cluster GKE est créé ! Configuration de kubectl..."
+                            
+                            // Configuration de gcloud et kubectl
+                            sh 'gcloud auth login --cred-file=$GOOGLE_CREDENTIALS'
+                            sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --region europe-west1 --project zero-trust-mlops-pfe'
+                        }
                     }
                 }
             }
         }
-
         stage('6. Déploiement du Modèle NIDS sur GKE') {
             steps {
                 echo 'Déploiement de l IA sur le cluster...'

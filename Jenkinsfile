@@ -141,7 +141,13 @@ with open('/tmp/gcp_token', 'w') as f:
                             export PATH=$PWD/bin:$PATH
                             
                             echo "Installation du profil minimal d'Istio..."
-                            ./bin/istioctl install --set profile=minimal -y
+                            echo "Installation du profil minimal d'Istio (Mode Economie)..."
+                            ./bin/istioctl install --set profile=minimal \
+                            --set components.pilot.k8s.resources.requests.cpu=10m \
+                            --set components.pilot.k8s.resources.requests.memory=128Mi \
+                            --set values.global.proxy.resources.requests.cpu=10m \
+                            --set values.global.proxy.resources.requests.memory=64Mi \
+                            -y
                             cd ..
                         fi
                         

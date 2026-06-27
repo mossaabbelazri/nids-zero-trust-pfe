@@ -42,7 +42,6 @@ pipeline {
             steps {
                 echo 'Récupération des secrets via HashiCorp Vault...'
                 
-                // Utilisation de "vault" pur pour respecter la norme DNS et satisfaire Java
                 withVault(
                     configuration: [
                         vaultUrl: 'http://vault:8200',
@@ -60,10 +59,20 @@ pipeline {
                 ) {
                     dir('terraform') {
                         echo 'Création du cluster GKE privé...'
+                        
+                        // Définition du projet de facturation pour le quota
+                        env.GOOGLE_BILLING_PROJECT = "zero-trust-mlops-pfe"
+                        
                         sh 'terraform init'
                         
-                        // Ligne de test ultime
-                        sh 'echo "Le secret récupéré est : ${GOOGLE_CREDENTIALS}"'
+                        // On lance le vrai déploiement sur Google Cloud !
+                        sh 'terraform apply -auto-approve'
+                        
+                        echo "Le cluster GKE est créé ! Configuration de kubectl..."
+                        
+                        // Configuration de gcloud avec le jeton fourni par Vault
+                        sh 'gcloud auth login --cred-file=$GOOGLE_CREDENTIALS'
+                        sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --region europe-west1 --project zero-trust-mlops-pfe'
                     }
                 }
             }

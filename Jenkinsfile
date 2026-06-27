@@ -63,14 +63,20 @@ pipeline {
                             echo 'Création du cluster GKE privé...'
                             sh 'terraform init'
                             
-                            // Lancement du déploiement réel sur Google Cloud
-                            sh 'terraform apply -auto-approve'
-                            
-                            echo "Le cluster GKE est créé ! Configuration de kubectl..."
-                            
-                            // Configuration de gcloud et kubectl
-                            sh 'gcloud auth login --cred-file=$GOOGLE_CREDENTIALS'
-                            sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --region europe-west1 --project zero-trust-mlops-pfe'
+                           // Lancement du déploiement réel sur Google Cloud
+                        sh 'terraform apply -auto-approve'
+                        
+                        echo "Le cluster GKE est créé ! Configuration de kubectl..."
+                        
+                        // CORRECTION : Écriture éphémère, authentification et nettoyage strict
+                        sh '''
+                            echo "$GOOGLE_CREDENTIALS" > /tmp/gcp_key.json
+                            gcloud auth activate-service-account --key-file=/tmp/gcp_key.json || gcloud auth login --cred-file=/tmp/gcp_key.json
+                            rm -f /tmp/gcp_key.json
+                        '''
+                        
+                        // Récupération des accès au cluster
+                        sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --zone europe-west1-b --project zero-trust-mlops-pfe'
                         }
                     }
                 }

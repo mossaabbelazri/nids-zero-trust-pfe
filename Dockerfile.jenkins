@@ -25,6 +25,10 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/sh
 RUN curl -sSL https://sdk.cloud.google.com | bash -s -- --install-dir=/usr/local --disable-prompts
 ENV PATH="${PATH}:/usr/local/google-cloud-sdk/bin"
 
+# NOUVEAU : Installation du plugin d'authentification GKE pour kubectl
+RUN gcloud components install gke-gcloud-auth-plugin --quiet
+ENV USE_GKE_GCLOUD_AUTH_PLUGIN=True
+
 # 5. Installation de kubectl (Téléchargement direct du binaire stable)
 RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
     chmod +x ./kubectl && \

@@ -57,35 +57,53 @@ pipeline {
                         ]
                     ]
                 ) {
-                    // Utilisation de withEnv pour injecter proprement le projet de facturation GCP
-                    withEnv(["GOOGLE_BILLING_PROJECT=zero-trust-mlops-pfe"]) {
-                        dir('terraform') {
+                    dir('terraform') {
+                        // 1. Préparation sécurisée du jeton pour Terraform
+                        sh 'echo "$GOOGLE_CREDENTIALS" > /tmp/gcp_adc.json'
+                        
+                        // 2. Terraform s'authentifie nativement
+                        withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
                             echo 'Création du cluster GKE privé...'
                             sh 'terraform init'
-                            
-                        // Lancement du déploiement réel sur Google Cloud
-                        sh 'terraform apply -auto-approve'
+                            sh 'terraform apply -auto-approve'
+                        }
                         
-                        echo "Le cluster GKE est créé ! Configuration de kubectl..."
+                        echo "Le cluster GKE est prêt ! Authentification Zero-Trust de kubectl..."
                         
-                        // CORRECTION : Export direct du fichier pour la CLI gcloud
+                        // 3. Échange OAuth2 par script Python pour contourner le blocage gcloud
                         sh '''
-                            echo "$GOOGLE_CREDENTIALS" > /tmp/gcp_adc.json
+                            python3 -c "
+import json, urllib.request, urllib.parse
+with open('/tmp/gcp_adc.json') as f:
+    creds = json.load(f)
+
+# Construction de la requête pour obtenir un Access Token jetable
+data = urllib.parse.urlencode({
+    'client_id': creds['client_id'], 
+    'client_secret': creds['client_secret'], 
+    'refresh_token': creds['refresh_token'], 
+    'grant_type': 'refresh_token'
+}).encode()
+
+req = urllib.request.Request('https://oauth2.googleapis.com/token', data=data)
+res = json.loads(urllib.request.urlopen(req).read())
+
+# Sauvegarde du jeton éphémère
+with open('/tmp/gcp_token', 'w') as f:
+    f.write(res['access_token'])
+"
+                            # On force gcloud à utiliser ce jeton temporaire
+                            gcloud config set auth/access_token_file /tmp/gcp_token
                             
-                            # On indique explicitement à gcloud d'utiliser ce fichier de jetons
-                            export CLOUDSDK_AUTH_CREDENTIAL_FILE=/tmp/gcp_adc.json
-                            export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json
-                            
-                            # Récupération des accès GKE (gcloud va lire le JSON tout seul)
+                            # Récupération des accès Kubernetes
                             gcloud container clusters get-credentials nids-zero-trust-cluster --zone europe-west1-b --project zero-trust-mlops-pfe
                             
-                            # Test de connexion rapide pour valider que kubectl répond
-                            kubectl cluster-info
+                            # Test de connectivité (Affiche les nœuds de ton cluster !)
+                            kubectl get nodes
                             
-                            # Nettoyage de sécurité
-                            rm -f /tmp/gcp_adc.json
+                            # Nettoyage absolu : on efface les jetons de la RAM/Disque
+                            rm -f /tmp/gcp_adc.json /tmp/gcp_token
                         '''
-                        }
                     }
                 }
             }

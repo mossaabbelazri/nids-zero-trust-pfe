@@ -108,6 +108,26 @@ with open('/tmp/gcp_token', 'w') as f:
                 }
             }
         }
+        stage('5.5. Build & Push Modèle NIDS') {
+            steps {
+                echo 'Construction et envoi de l\'image Docker de l\'IA...'
+                dir('nids-app') {
+                    // Injection sécurisée des identifiants Docker Hub
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+                        sh '''
+                            # Connexion à Docker Hub
+                            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                            
+                            # Construction de l'image (le tag sera ton_user/nids-model:latest)
+                            docker build -t "$DOCKER_USER"/nids-model:latest .
+                            
+                            # Poussée de l'image vers le registre public
+                            docker push "$DOCKER_USER"/nids-model:latest
+                        '''
+                    }
+                }
+            }
+        }
         stage('6. Déploiement du Modèle NIDS sur GKE') {
             steps {
                 echo 'Initialisation et sécurisation du réseau via Istio...'

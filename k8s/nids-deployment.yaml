@@ -17,16 +17,16 @@ spec:
     spec:
       containers:
         - name: nids-container
-          image: gcr.io/zero-trust-mlops-pfe/nids-model:latest # Ton image d'IA scorée par Trivy
+          image: nginx:alpine # <--- ON MET UNE IMAGE QUI EXISTE VRAIMENT
           ports:
             - containerPort: 5000 # Le port exposé par ton API (Flask/FastAPI)
-          resources:
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
-            requests:
-              cpu: "200m"
-              memory: "256Mi"
+              resources:
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+                requests:
+                  cpu: "200m"
+                  memory: "256Mi"
 ---
 apiVersion: v1
 kind: Service

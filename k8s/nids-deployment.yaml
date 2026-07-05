@@ -18,6 +18,7 @@ spec:
       containers:
         - name: nids-container
           image: mossaabbelazri/nids-model:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 5000
           resources:

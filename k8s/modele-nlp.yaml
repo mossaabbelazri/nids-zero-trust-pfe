@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nlp-model-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nlp-ai
+  template:
+    metadata:
+      labels:
+        app: nlp-ai
+    spec:
+      containers:
+        - name: ia-container
+          image: mossaabbelazri/nids-model:latest
+          imagePullPolicy: Always
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow-service.default.svc.cluster.local:5000"
+            - name: MODEL_NAME
+              value: "NLP_SENTIMENT_ANALYSIS" # K8s charge le modèle NLP
+          ports:
+            - containerPort: 5000

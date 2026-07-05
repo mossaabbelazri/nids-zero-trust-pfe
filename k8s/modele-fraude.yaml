@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud-model-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fraud-ai
+  template:
+    metadata:
+      labels:
+        app: fraud-ai
+    spec:
+      containers:
+        - name: ia-container
+          image: mossaabbelazri/nids-model:latest # On utilise la même image !
+          imagePullPolicy: Always
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow-service.default.svc.cluster.local:5000"
+            - name: MODEL_NAME
+              value: "FRAUD_DETECTION_RF" # K8s charge le modèle de fraude
+          ports:
+            - containerPort: 5000

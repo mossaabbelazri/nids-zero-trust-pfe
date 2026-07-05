@@ -11,7 +11,8 @@ app = FastAPI(title="API NIDS - Zero Trust (Production)")
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow-service.default.svc.cluster.local:5000")
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
-MODEL_NAME = "NIDS_XGBoost"
+# Kubernetes dictera le nom du modèle à charger (par défaut NIDS_XGBoost si vide)
+MODEL_NAME = os.getenv("MODEL_NAME", "NIDS_XGBoost")
 MODEL_STAGE = "Production"
 model = None
 

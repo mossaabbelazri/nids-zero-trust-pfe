@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: mlflow
-          image: bitnami/mlflow:latest
+          image: bitnami/mlflow:2.14.1
           ports:
             - containerPort: 5000
           resources:

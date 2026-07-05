@@ -19,9 +19,12 @@ spec:
           ports:
             - containerPort: 5000
           resources:
+            requests:
+              cpu: "50m" # Demande seulement 5% d'un cœur CPU
+              memory: "128Mi" # Demande seulement 128 Mo de RAM
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "200m" # Limite max à 20% de CPU
+              memory: "256Mi" # Limite max à 256 Mo de RAM
 ---
 apiVersion: v1
 kind: Service

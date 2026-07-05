@@ -17,9 +17,9 @@ spec:
     spec:
       containers:
         - name: nids-container
-          image: nginx:alpine
+          image: nginx:latest
           ports:
-            - containerPort: 5000
+            - containerPort: 80
           resources: # <-- ALIGNEMENT CORRIGÉ : Exactement au même niveau que "ports"
             limits:
               cpu: "500m"

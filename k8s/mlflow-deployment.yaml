@@ -14,9 +14,9 @@ spec:
         app: mlflow
     spec:
       containers:
-        - name: mlflow
-          image: bitnami/mlflow:2.14.1
-          ports:
+      - name: mlflow
+        image: ghcr.io/mlflow/mlflow:v2.14.1  # <--- Utilisation de l'image officielle
+        ports:
             - containerPort: 5000
           resources:
             requests:

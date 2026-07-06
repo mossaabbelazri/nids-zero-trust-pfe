@@ -1,11 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 import pandas as pd
 # pyrefly: ignore [missing-import]
 import mlflow.xgboost
 import os
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 
 app = FastAPI(title="API NIDS - Zero Trust (Production)")
+
+# Définition de la métrique Prometheus pour le NIDS
+NIDS_ALERTS = Counter("nids_intrusion_alerts_total", "Nombre total d'intrusions réseau détectées par le NIDS")
 
 # L'URL DNS interne de Kubernetes pour pointer vers le pod MLflow
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow-service.default.svc.cluster.local:5000")
@@ -50,5 +54,10 @@ def predict_traffic(flow: NetworkFlow):
     is_attack = int(prediction[0]) == 1
     
     if is_attack:
+        NIDS_ALERTS.inc()
         return {"status": "Attaque", "action": "Block"}
     return {"status": "Sain", "action": "Allow"}
+
+@app.get("/metrics")
+def metrics():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

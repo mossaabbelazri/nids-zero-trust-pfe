@@ -190,6 +190,10 @@ EOF
                         echo "Déploiement du modèle d'IA..."
                         kubectl apply -f k8s/
                         
+                        # 7. Emballage et injection dynamique des fichiers de configuration bruts de monitoring
+                        kubectl create configmap prometheus-rules-config --from-file=prometheus-rules.yml --dry-run=client -o yaml | kubectl apply -f -
+                        kubectl create configmap alertmanager-config --from-file=alertmanager.yml --dry-run=client -o yaml | kubectl apply -f -
+                        
                         # Vérification de l'état du déploiement
                         kubectl rollout status deployment/nids-model-deployment --timeout=90s
                         

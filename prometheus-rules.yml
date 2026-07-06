@@ -1,17 +1,16 @@
 groups:
   - name: zero-trust-security-rules
     rules:
-      # 1. Alerte de compromission de nœud (Détection d'intrusion ou mouvements latéraux suspects)
       - alert: NodeCompromised
-        # Déclencheur : Soit le modèle NIDS remonte plus de 5 intrusions en 1 min, 
-        # soit Istio bloque plus de 10 tentatives de connexion mTLS invalides (signe de mouvement latéral bloqué)
+        # Déclencheur PRO : Détecte un pic massif de requêtes bloquées (403/503)
+        # ou de connexions TCP rejetées brutalement par le proxy mTLS d'Istio.
         expr: |
-          sum by (instance) (rate(nids_intrusion_alerts_total[1m])) > 5 
-          or 
-          sum by (instance) (rate(istio_tcp_connections_closed_total{reporter="destination", response_flags="FI"}[1m])) > 10
-        for: 30s # Temps de persistance de l'anomalie avant de lever l'alerte
+          sum by (destination_workload) (rate(istio_requests_total{response_code=~"403|503"}[1m])) > 10
+          or
+          sum by (destination_workload) (rate(istio_tcp_connections_closed_total{response_flags=~"FI|UC"}[1m])) > 10
+        for: 15s
         labels:
           severity: critical
         annotations:
-          summary: "Suspicion de compromission sur le nœud : {{ $labels.instance }}"
-          description: "Le nœud {{ $labels.instance }} présente un comportement anormal : détections NIDS élevées ou blocages mTLS répétés par Istio. Isolation et remédiation requises."
+          summary: "Brèche Zero-Trust bloquée vers : {{ $labels.destination_workload }}"
+          description: "Une attaque massive (DDoS ou Intrusion latérale) a été interceptée par le pare-feu Istio mTLS. Auto-remédiation Terraform déclenchée."

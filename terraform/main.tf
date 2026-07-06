@@ -1,3 +1,9 @@
+terraform {
+  backend "gcs" {
+    bucket  = "zero-trust-tfstate-bucket"
+    prefix  = "terraform/state"
+  }
+}
 resource "google_container_cluster" "primary" {
   name     = "nids-zero-trust-cluster"
   location = "europe-west1-b" # Utilise une ZONE précise plutôt qu'une REGION entière pour économiser les nœuds

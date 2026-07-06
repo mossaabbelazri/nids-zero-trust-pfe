@@ -381,7 +381,7 @@ terraform destroy -auto-approve
 
 ## 👤 Auteur
 
-**Mossaab Belazri** — Étudiant en Master, Projet de Fin d'Études (PFE)
+**Mossaab Belazri** 
 
 [![GitHub](https://img.shields.io/badge/GitHub-mossaabbelazri-181717?logo=github)](https://github.com/mossaabbelazri)
 

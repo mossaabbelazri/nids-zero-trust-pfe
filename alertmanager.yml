@@ -3,30 +3,30 @@ global:
 
 route:
   # 1. Temporisation anti-spam (Regroupe les alertes par nœud et par nom)
-  group_by: ['alertname', 'instance']
-  group_wait: 10s       # Attend 10s pour voir si d'autres alertes similaires arrivent
-  group_interval: 1m    # Envoie un lot toutes les minutes maximum
-  repeat_interval: 1h   # Ne répète pas la même alerte avant 1h
+  group_by: ["alertname", "instance"]
+  group_wait: 10s # Attend 10s pour voir si d'autres alertes similaires arrivent
+  group_interval: 1m # Envoie un lot toutes les minutes maximum
+  repeat_interval: 1h # Ne répète pas la même alerte avant 1h
 
   # Route par défaut (Pour les alertes classiques : RAM, CPU, réseau...)
-  receiver: 'equipe-surveillance-slack'
+  receiver: "equipe-surveillance-slack"
 
   routes:
     # 2. Route SPÉCIFIQUE et chirurgicale pour l'Auto-Remédiation
     - match:
-        severity: 'critical'
-        alertname: 'NodeCompromised' # Doit correspondre EXACTEMENT à ta règle Prometheus
-      receiver: 'jenkins-remediation'
+        severity: "critical"
+        alertname: "NodeCompromised" # Doit correspondre EXACTEMENT à ta règle Prometheus
+      receiver: "jenkins-remediation"
       continue: false # Si ça matche, on n'envoie pas à l'équipe Slack en double
 
 receivers:
-- name: 'jenkins-remediation'
-  webhook_configs:
-    # 3. Utilisation du DNS interne de Kubernetes pour le Zero-Trust (Pas d'IP externe)
-  - url: 'http://jenkins-service.default.svc.cluster.local:8080/generic-webhook-trigger/invoke?token=secret-token-auto-remediation'
-    send_resolved: false
+  - name: "jenkins-remediation"
+    webhook_configs:
+      # 3. Utilisation du DNS interne de Kubernetes pour le Zero-Trust (Pas d'IP externe)
+      - url: "https://smell-unselect-discern.ngrok-free.dev/generic-webhook-trigger/invoke?token=secret-token-auto-remediation"
+        send_resolved: false
 
-- name: 'equipe-surveillance-slack'
-  slack_configs:
-  - api_url: 'https://hooks.example.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
-    channel: '#alertes-mlops'
+  - name: "equipe-surveillance-slack"
+    slack_configs:
+      - api_url: "https://hooks.example.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+        channel: "#alertes-mlops"

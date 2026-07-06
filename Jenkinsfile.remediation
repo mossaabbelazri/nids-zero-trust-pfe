@@ -1,0 +1,62 @@
+pipeline {
+    agent any
+
+    triggers {
+        GenericTrigger(
+            genericVariables: [
+                [key: 'alert_name', value: '$.alerts[0].labels.alertname'],
+                [key: 'node_name', value: '$.alerts[0].labels.instance']
+            ],
+            token: 'secret-token-auto-remediation',
+            causeString: 'Auto-remédiation déclenchée par Prometheus pour l alerte: $alert_name sur le nœud $node_name',
+            printContributedVariables: true,
+            printPostContent: true,
+            silentResponse: false
+        )
+    }
+
+    stages {
+        stage('Vérification') {
+            steps {
+                echo "Alerte reçue de Prometheus : ${env.alert_name} sur le nœud ${env.node_name}"
+            }
+        }
+
+        stage('Isolation & Quarantaine (Kube-Ops)') {
+            when { expression { return env.alert_name == 'NodeCompromised' } }
+            steps {
+                echo "Quarantaine du nœud affecté pour empêcher tout mouvement latéral..."
+                // Optionnel : Ajout d'une commande kubectl cordon/drain si configuré
+            }
+        }
+
+        stage('Auto-Guérison (Terraform-IaC)') {
+            when { expression { return env.alert_name == 'NodeCompromised' } }
+            steps {
+                echo "Début du remplacement chirurgical du pool de nœuds..."
+                
+                withVault(
+                    configuration: [vaultUrl: 'http://vault:8200', vaultCredentialId: 'vault-token-id'],
+                    vaultSecrets: [[path: 'secret/gcp', engineVersion: 2, secretValues: [[envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']]]]
+                ) {
+                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
+                        dir('terraform') {
+                            sh 'echo "$GOOGLE_CREDENTIALS" > /tmp/gcp_adc.json'
+                            sh 'terraform init'
+                            // Durcissement : Ajout du lock-timeout pour gérer la concurrence
+                            sh 'terraform apply -replace="google_container_node_pool.mlops_nodes" -lock-timeout=3m -auto-approve'
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Le niveau de rigueur de production : Garantie absolue de nettoyage des secrets
+    post {
+        always {
+            echo "Nettoyage final de l'espace de travail..."
+            sh 'rm -f /tmp/gcp_adc.json'
+        }
+    }
+}

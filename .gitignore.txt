@@ -1,5 +1,0 @@
-.venv/
-__pycache__/
-*.json
-*.models
-.terraform/

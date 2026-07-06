@@ -5,6 +5,10 @@ metadata:
   namespace: default
   labels:
     app: nids-ai
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "nids-role"
+    vault.hashicorp.com/agent-inject-secret-credentials: "secret/data/mlflow"
 spec:
   replicas: 1
   selector:
@@ -14,6 +18,10 @@ spec:
     metadata:
       labels:
         app: nids-ai
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "nids-role"
+        vault.hashicorp.com/agent-inject-secret-credentials: "secret/data/mlflow"
     spec:
       containers:
         - name: nids-container
@@ -34,6 +42,8 @@ kind: Service
 metadata:
   name: nids-model-service
   namespace: default
+  annotations:
+    cloud.google.com/backend-config: '{"default": "nids-wafs-config"}'
 spec:
   type: ClusterIP # ClusterIP pour qu'il reste privé, Istio gérera l'entrée
   selector:

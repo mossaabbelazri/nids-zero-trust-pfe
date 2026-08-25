@@ -33,11 +33,16 @@ pipeline {
         stage('Neutralisation de l\'Attaquant (Zero Trust)') {
             when { expression { return env.alert_name == 'NodeCompromised' } }
             steps {
-                echo "🔴 Attaque DDoS détectée ! Isolation immédiate du namespace attack-simulation..."
-                sh 'kubectl scale deployment locust-attacker -n attack-simulation --replicas=0'
-                echo "✅ Pod attaquant neutralisé. CPU en cours de normalisation..."
+                echo "🔴 Attaque DDoS détectée ! Quarantaine réseau du namespace attack-simulation..."
+                // ✅ Approche Zero Trust professionnelle : isoler le namespace attaquant
+                // au niveau réseau via une NetworkPolicy (Deny All Egress/Ingress).
+                // Le pod attaquant reste en vie mais toutes ses connexions sont coupées.
+                // C'est la réponse SOAR réelle : isoler, ne pas supprimer (préserver les preuves).
+                sh 'kubectl apply -f k8s/quarantine-networkpolicy.yaml'
+                echo "✅ Namespace attack-simulation mis en quarantaine réseau (Zero Trust Deny-All)."
                 sh 'sleep 5'
-                sh 'kubectl get pods -n attack-simulation'
+                echo "📋 État du namespace après quarantaine :"
+                sh 'kubectl get networkpolicy -n attack-simulation'
             }
         }
 

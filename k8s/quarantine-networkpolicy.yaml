@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: quarantine-attack-simulation
+  namespace: attack-simulation
+  labels:
+    remediation: zero-trust
+    triggered-by: prometheus-alert
+spec:
+  # Appliqué à TOUS les pods du namespace attack-simulation
+  podSelector: {}
+  policyTypes:
+    - Egress
+    - Ingress
+  # Deny ALL Ingress : personne ne peut entrer dans le namespace
+  ingress: []
+  # Deny ALL Egress : le namespace ne peut plus envoyer de trafic vers l'extérieur
+  egress:
+    # Autoriser uniquement le DNS (port 53) pour éviter un crash complet du pod
+    # mais bloquer tout le trafic HTTP/applicatif vers les autres namespaces
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

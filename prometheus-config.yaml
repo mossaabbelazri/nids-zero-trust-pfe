@@ -24,3 +24,21 @@ spec:
           annotations:
             summary: "Suspicion de compromission sur le nœud : {{ $labels.instance }}"
             description: "Le nœud {{ $labels.instance }} présente un comportement anormal : détections NIDS élevées ou blocages mTLS répétés par Istio. Isolation et remédiation requises."
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: istio-proxies-monitor
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus
+spec:
+  namespaceSelector:
+    any: true
+  selector:
+    matchLabels:
+      security.istio.io/tlsMode: istio
+  podMetricsEndpoints:
+  - port: http-envoy-prom
+    path: /stats/prometheus
+    interval: 10s

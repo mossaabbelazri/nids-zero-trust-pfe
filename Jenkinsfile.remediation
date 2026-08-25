@@ -41,6 +41,18 @@ pipeline {
                     withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
                         // writeFile évite la corruption JSON causée par shell echo
                         script { writeFile file: '/tmp/gcp_adc.json', text: env.GOOGLE_CREDENTIALS }
+                        // Décodage automatique : si le secret Vault est en base64, on le décode
+                        sh '''
+                            FIRST_CHAR=$(head -c 1 /tmp/gcp_adc.json)
+                            if [ "$FIRST_CHAR" != "{" ]; then
+                                echo "[INFO] Secret non-JSON détecté, tentative de décodage base64..."
+                                base64 -d /tmp/gcp_adc.json > /tmp/gcp_decoded.json
+                                mv /tmp/gcp_decoded.json /tmp/gcp_adc.json
+                                echo "[OK] Décodage base64 réussi."
+                            else
+                                echo "[OK] Secret JSON valide détecté."
+                            fi
+                        '''
                         // Authentification GCP + récupération du kubeconfig du cluster GKE
                         sh 'gcloud auth activate-service-account --key-file=/tmp/gcp_adc.json'
                         sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --zone=europe-west1-b --project=zero-trust-mlops-pfe'
@@ -70,6 +82,14 @@ pipeline {
                     withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
                         // writeFile évite la corruption JSON causée par shell echo
                         script { writeFile file: '/tmp/gcp_adc.json', text: env.GOOGLE_CREDENTIALS }
+                        // Décodage automatique si secret base64
+                        sh '''
+                            FIRST_CHAR=$(head -c 1 /tmp/gcp_adc.json)
+                            if [ "$FIRST_CHAR" != "{" ]; then
+                                base64 -d /tmp/gcp_adc.json > /tmp/gcp_decoded.json
+                                mv /tmp/gcp_decoded.json /tmp/gcp_adc.json
+                            fi
+                        '''
                         dir('terraform') {
                             sh 'rm -rf .terraform *.tfstate*'
                             sh 'terraform init -input=false'

@@ -1,19 +1,4 @@
 apiVersion: monitoring.coreos.com/v1
-kind: Prometheus
-metadata:
-  name: k8s
-  namespace: monitoring
-spec:
-  ruleSelector:
-    matchLabels:
-      role: alert-rules
-  alerting:
-    alertmanagers:
-      - namespace: monitoring
-        name: alertmanager-main
-        port: web
----
-apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: zero-trust-rules

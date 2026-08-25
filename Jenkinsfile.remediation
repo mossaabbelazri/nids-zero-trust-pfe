@@ -42,7 +42,7 @@ pipeline {
                     withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
                         dir('terraform') {
                             sh 'echo "$GOOGLE_CREDENTIALS" > /tmp/gcp_adc.json'
-                            sh 'terraform init'
+                            sh 'terraform init -input=false -reconfigure'
                             // Durcissement : Ajout du lock-timeout pour gérer la concurrence
                             sh 'terraform apply -replace="google_container_node_pool.mlops_nodes" -lock-timeout=3m -auto-approve'
                         }

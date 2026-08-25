@@ -1,0 +1,167 @@
+# =============================================================================
+# Locust Attack Simulator — Déploiement Kubernetes (Hors Mesh Istio)
+# =============================================================================
+# Ce manifest déploie Locust dans un namespace ISOLÉ sans injection Istio.
+# Le pod n'aura PAS de sidecar Envoy → pas de certificat mTLS →
+# toutes ses requêtes vers le mesh seront REJETÉES par Istio.
+#
+# C'est exactement le comportement recherché pour :
+#   1. Prouver que le Zero-Trust bloque les communications non autorisées
+#   2. Générer les métriques istio_tcp_connections_closed_total
+#   3. Déclencher l'alerte Prometheus "NodeCompromised"
+#   4. Activer la boucle d'auto-remédiation Jenkins → Terraform
+#
+# Utilisation :
+#   kubectl apply -f k8s/locust-attack.yaml
+#   kubectl port-forward svc/locust-service -n attack-simulation 8089:8089
+#   → Ouvrir http://localhost:8089 pour lancer l'attaque via l'interface web
+#
+# Nettoyage :
+#   kubectl delete namespace attack-simulation
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. NAMESPACE — Espace isolé SANS protection Istio (zone d'attaque contrôlée)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: attack-simulation
+  labels:
+    purpose: security-testing
+    # IMPORTANT : PAS de label "istio-injection: enabled"
+    # → Les pods de ce namespace n'auront PAS de sidecar Envoy
+    # → Ils ne pourront PAS communiquer avec le mesh mTLS
+
+---
+# -----------------------------------------------------------------------------
+# 2. CONFIGMAP — Injection du script d'attaque Locust dans le pod
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locust-script
+  namespace: attack-simulation
+data:
+  locustfile.py: |
+    """
+    Locust Attack — Script injecté via ConfigMap
+    Cible : nids-model-service.default.svc.cluster.local
+    """
+    from locust import HttpUser, task, between, events
+    import logging
+
+    # Payloads de flux réseau malveillants
+    ATTACK_PAYLOADS = [
+        {"destination_port": 22, "flow_duration": 0.5, "total_fwd_packets": 100, "total_backward_packets": 0},
+        {"destination_port": 443, "flow_duration": 120.0, "total_fwd_packets": 10, "total_backward_packets": 5000},
+        {"destination_port": 80, "flow_duration": 0.01, "total_fwd_packets": 10000, "total_backward_packets": 0},
+        {"destination_port": 22, "flow_duration": 30.0, "total_fwd_packets": 500, "total_backward_packets": 500},
+    ]
+
+    class NIDSAttacker(HttpUser):
+        """Simulateur d'attaque DDoS Layer 7 contre le NIDS."""
+        wait_time = between(0.1, 0.5)
+        payload_index = 0
+
+        @task(3)
+        def flood_health(self):
+            """Reconnaissance : Sonde /health (75% du trafic)."""
+            with self.client.get("/health", catch_response=True, name="[RECON] GET /health", timeout=2) as r:
+                if r.status_code == 0 or r.elapsed.total_seconds() > 1.5:
+                    r.success()
+
+        @task(1)
+        def flood_predict(self):
+            """Attaque ciblée : Envoi de flux malveillants à /predict (25% du trafic)."""
+            payload = ATTACK_PAYLOADS[self.payload_index % len(ATTACK_PAYLOADS)]
+            self.payload_index += 1
+            with self.client.post("/predict", json=payload, catch_response=True, name="[ATTACK] POST /predict", timeout=2) as r:
+                if r.status_code == 0 or r.elapsed.total_seconds() > 1.5:
+                    r.success()
+
+    @events.test_start.add_listener
+    def on_start(environment, **kwargs):
+        logging.warning("=" * 60)
+        logging.warning("  ATTAQUE DDoS LAYER 7 DÉMARRÉE")
+        logging.warning("  Cible : %s", environment.host)
+        logging.warning("  Statut attendu : 100%% ÉCHECS (mTLS Zero-Trust)")
+        logging.warning("=" * 60)
+
+    @events.test_stop.add_listener
+    def on_stop(environment, **kwargs):
+        logging.warning("  ATTAQUE TERMINÉE — Vérifiez Prometheus pour NodeCompromised")
+
+---
+# -----------------------------------------------------------------------------
+# 3. DEPLOYMENT — Pod Locust avec interface web de pilotage
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-attacker
+  namespace: attack-simulation
+  labels:
+    app: locust
+    role: attack-simulator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust
+  template:
+    metadata:
+      labels:
+        app: locust
+        role: attack-simulator
+      # Pas d'annotation Istio → confirme l'absence de sidecar
+    spec:
+      containers:
+        - name: locust
+          image: locustio/locust:latest
+          ports:
+            - containerPort: 8089
+              name: web-ui
+          # Commande de démarrage : Locust en mode master avec UI web
+          command:
+            - locust
+            - --locustfile=/mnt/locust/locustfile.py
+            - --host=http://nids-model-service.default.svc.cluster.local
+            - --web-host=0.0.0.0
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          # Montage du script d'attaque depuis le ConfigMap
+          volumeMounts:
+            - name: locust-script-volume
+              mountPath: /mnt/locust
+              readOnly: true
+      volumes:
+        - name: locust-script-volume
+          configMap:
+            name: locust-script
+
+---
+# -----------------------------------------------------------------------------
+# 4. SERVICE — Exposition du dashboard Locust pour kubectl port-forward
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-service
+  namespace: attack-simulation
+  labels:
+    app: locust
+spec:
+  type: ClusterIP
+  selector:
+    app: locust
+  ports:
+    - port: 8089
+      targetPort: 8089
+      name: web-ui
+      protocol: TCP

@@ -109,6 +109,7 @@ L'architecture repose sur **quatre piliers de sécurité** opérant en profondeu
 | **WAF** | Google Cloud Armor | Filtrage du trafic malveillant en amont via BackendConfig |
 | **Monitoring** | Prometheus + Grafana + Kiali | Surveillance temps réel, alertes, visualisation de la topologie réseau |
 | **Auto-Remédiation** | Alertmanager + Jenkins Webhook + Terraform | Reconstruction autonome des nœuds compromis |
+| **Simulation d'Attaque** | Locust | Simulation DDoS Layer 7 contrôlée pour tester la chaîne Zero-Trust → Auto-Remédiation |
 | **Tunnel Sécurisé** | Ngrok | Exposition sécurisée du webhook Jenkins pour Alertmanager |
 
 ---
@@ -130,12 +131,16 @@ nids-zero-trust-pfe/
 │   ├── requirements.txt           # Dépendances Python
 │   └── .trivyignore               # Exclusions Trivy
 │
+├── locust/                        # Simulation d'Attaque (Chaos Engineering)
+│   └── locustfile.py              # Script DDoS Layer 7 (HTTP Flood contrôlé)
+│
 ├── terraform/                     # Infrastructure as Code
 │   └── main.tf                    # Cluster GKE + Shielded Nodes + Backend GCS distant
 │
 ├── k8s/                           # Manifestes Kubernetes
 │   ├── nids-deployment.yaml       # Deployment + Service (annotations Vault + Cloud Armor)
 │   ├── nids-backendconfig.yaml    # BackendConfig Cloud Armor (WAF)
+│   ├── locust-attack.yaml         # Déploiement Locust (namespace isolé, hors mesh Istio)
 │   ├── mlflow-deployment.yaml     # Déploiement MLflow sur GKE
 │   ├── modele-fraude.yaml         # Modèle de détection de fraude
 │   └── modele-nlp.yaml            # Modèle NLP
@@ -300,6 +305,44 @@ curl -X POST -H "Content-Type: application/json" `
 3. Jenkins s'authentifie sur GCP via Vault, télécharge l'état Terraform distant depuis le bucket GCS.
 4. Terraform exécute `terraform apply -replace="google_container_node_pool.mlops_nodes"` → Destruction chirurgicale et reconstruction du pool de nœuds.
 5. Le pipeline se termine avec le statut **SUCCESS**.
+
+### Scénario C : Simulation d'Attaque DDoS Layer 7 avec Locust
+
+Déploiement d'un simulateur d'attaque **Locust** dans un namespace isolé (hors mesh Istio) pour déclencher la chaîne complète de manière **automatique et réaliste** :
+
+```bash
+# 1. Déploiement du simulateur d'attaque (namespace isolé, SANS Istio)
+kubectl apply -f k8s/locust-attack.yaml
+
+# 2. Vérification : le pod Locust est prêt (1/1 — pas de sidecar !)
+kubectl get pods -n attack-simulation
+
+# 3. Accès au dashboard Locust (interface web temps réel)
+kubectl port-forward svc/locust-service -n attack-simulation 8089:8089
+# → Ouvrir http://localhost:8089
+```
+
+**Configuration de l'attaque dans l'interface Locust** :
+- **Number of users** : `50` (utilisateurs virtuels simultanés)
+- **Spawn rate** : `10` (nouveaux utilisateurs par seconde)
+- **Host** : Déjà configuré (`http://nids-model-service.default.svc.cluster.local`)
+- Cliquer sur **Start swarming** pour lancer l'attaque
+
+**Cinématique automatique observée** :
+1. Locust envoie des centaines de requêtes HTTP vers `/health` et `/predict`.
+2. **100% des requêtes échouent** — Istio rejette toute connexion sans certificat mTLS valide.
+3. Les rejets TCP massifs génèrent un pic de la métrique `istio_tcp_connections_closed_total{response_flags="FI|UC"}`.
+4. Prometheus détecte que le taux dépasse le seuil (>10/min) → L'alerte `NodeCompromised` passe en état **FIRING**.
+5. Alertmanager route l'alerte vers le webhook Jenkins (via Ngrok).
+6. Le pipeline `NIDS-Auto-Remediation` se déclenche → Terraform reconstruit le pool de nœuds.
+7. Le cluster revient à un état sain avec des nœuds vierges.
+
+```bash
+# Nettoyage après la démonstration
+kubectl delete namespace attack-simulation
+```
+
+> ⚡ **Avantage par rapport au Scénario B** : Le Scénario C déclenche la boucle d'auto-remédiation de manière **organique** via de vraies métriques Istio, sans simulation manuelle d'alerte. C'est la preuve la plus convaincante pour le jury.
 
 ---
 

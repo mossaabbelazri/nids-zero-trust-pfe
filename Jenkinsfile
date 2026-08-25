@@ -64,7 +64,8 @@ pipeline {
                         // 2. Terraform s'authentifie nativement
                         withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
                             echo 'Création du cluster GKE privé...'
-                            sh 'terraform init -input=false -reconfigure'
+                            sh 'rm -rf .terraform *.tfstate*'
+                            sh 'terraform init -input=false'
                             sh 'terraform apply -auto-approve'
                         }
                         

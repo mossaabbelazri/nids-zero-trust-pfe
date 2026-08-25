@@ -30,6 +30,17 @@ pipeline {
             }
         }
 
+        stage('Neutralisation de l\'Attaquant (Zero Trust)') {
+            when { expression { return env.alert_name == 'NodeCompromised' } }
+            steps {
+                echo "🔴 Attaque DDoS détectée ! Isolation immédiate du namespace attack-simulation..."
+                sh 'kubectl scale deployment locust-attacker -n attack-simulation --replicas=0'
+                echo "✅ Pod attaquant neutralisé. CPU en cours de normalisation..."
+                sh 'sleep 5'
+                sh 'kubectl get pods -n attack-simulation'
+            }
+        }
+
         stage('Auto-Guérison (Terraform-IaC)') {
             when { expression { return env.alert_name == 'NodeCompromised' } }
             steps {

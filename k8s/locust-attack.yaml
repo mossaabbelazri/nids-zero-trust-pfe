@@ -68,8 +68,10 @@ data:
         def flood_health(self):
             """Reconnaissance : Sonde /health (75% du trafic)."""
             with self.client.get("/health", catch_response=True, name="[RECON] GET /health", timeout=2) as r:
-                if r.status_code == 0 or r.elapsed.total_seconds() > 1.5:
+                if r.status_code == 200:
                     r.success()
+                else:
+                    r.failure(f"Blocked by Zero-Trust (mTLS) - Status: {r.status_code}")
 
         @task(1)
         def flood_predict(self):
@@ -77,8 +79,10 @@ data:
             payload = ATTACK_PAYLOADS[self.payload_index % len(ATTACK_PAYLOADS)]
             self.payload_index += 1
             with self.client.post("/predict", json=payload, catch_response=True, name="[ATTACK] POST /predict", timeout=2) as r:
-                if r.status_code == 0 or r.elapsed.total_seconds() > 1.5:
+                if r.status_code == 200:
                     r.success()
+                else:
+                    r.failure(f"Blocked by Zero-Trust (mTLS) - Status: {r.status_code}")
 
     @events.test_start.add_listener
     def on_start(environment, **kwargs):

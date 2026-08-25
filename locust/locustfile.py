@@ -96,9 +96,10 @@ class NIDSAttacker(HttpUser):
             name="[RECON] GET /health",
             timeout=2
         ) as response:
-            # En conditions Zero-Trust, on s'attend à un ÉCHEC (connection reset)
-            if response.status_code == 0 or response.elapsed.total_seconds() > 1.5:
-                response.success()  # L'échec EST le résultat attendu
+            if response.status_code == 200:
+                response.success()
+            else:
+                response.failure(f"Blocked by Zero-Trust (mTLS) - Status: {response.status_code}")
 
     @task(1)
     def flood_predict_endpoint(self):
@@ -118,8 +119,10 @@ class NIDSAttacker(HttpUser):
             headers={"Content-Type": "application/json"},
             timeout=2
         ) as response:
-            if response.status_code == 0 or response.elapsed.total_seconds() > 1.5:
-                response.success()  # L'échec EST le résultat attendu
+            if response.status_code == 200:
+                response.success()
+            else:
+                response.failure(f"Blocked by Zero-Trust (mTLS) - Status: {response.status_code}")
 
 
 # ============================================================================

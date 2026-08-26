@@ -9,7 +9,8 @@ resource "google_container_cluster" "primary" {
   location = "europe-west1-b" # Utilise une ZONE précise plutôt qu'une REGION entière pour économiser les nœuds
 
 # Configuration du mode Standard ultra-léger
-  initial_node_count = 3 
+# Augmenté à 4 nœuds pour supporter la charge CPU du module de sécurité Calico (Zero-Trust)
+  initial_node_count = 4 
 
   node_config {
     machine_type = "e2-medium" # Machine standard et économique

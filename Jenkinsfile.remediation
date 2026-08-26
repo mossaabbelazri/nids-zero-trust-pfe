@@ -45,11 +45,15 @@ pipeline {
                         sh 'mkdir -p ~/.config/gcloud && cp /tmp/gcp_adc.json ~/.config/gcloud/application_default_credentials.json'
                         sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --zone=europe-west1-b --project=zero-trust-mlops-pfe'
                         // ✅ Zero Trust : quarantaine réseau du namespace attaquant via NetworkPolicy
-                        sh 'kubectl apply -f k8s/quarantine-networkpolicy.yaml --validate=false'
-                        echo "✅ Namespace attack-simulation mis en quarantaine réseau (Zero Trust Deny-All)."
-                        sh 'sleep 5'
-                        echo "📋 État du namespace après quarantaine :"
-                        sh 'kubectl get networkpolicy -n attack-simulation'
+                        // Extraire le token d'accès directement via l'ADC
+                        sh '''
+                            export GCP_TOKEN=$(gcloud auth application-default print-access-token)
+                            kubectl apply -f k8s/quarantine-networkpolicy.yaml --token=$GCP_TOKEN --validate=false
+                            echo "✅ Namespace attack-simulation mis en quarantaine réseau (Zero Trust Deny-All)."
+                            sleep 5
+                            echo "📋 État du namespace après quarantaine :"
+                            kubectl get networkpolicy -n attack-simulation --token=$GCP_TOKEN
+                        '''
                     }
                 }
             }

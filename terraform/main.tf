@@ -29,4 +29,16 @@ resource "google_container_cluster" "primary" {
 
   # Désactivation des fonctionnalités lourdes non requises pour le lab
   deletion_protection = false
+
+  # Activation des NetworkPolicies (Murs de feu Layer 4 Zero-Trust)
+  network_policy {
+    enabled  = true
+    provider = "CALICO"
+  }
+
+  addons_config {
+    network_policy_config {
+      disabled = false
+    }
+  }
 }

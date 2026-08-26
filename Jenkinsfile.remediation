@@ -46,13 +46,12 @@ pipeline {
                         sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --zone=europe-west1-b --project=zero-trust-mlops-pfe'
                         sh '''
                             export GCP_TOKEN=$(gcloud auth application-default print-access-token)
-                            # Le cluster GKE n'a pas le module Calico/NetworkPolicy activé (dans main.tf)
-                            # Donc la NetworkPolicy est ignorée. L'action SOAR de repli est l'Éviction (Scale to 0).
-                            kubectl scale deployment locust-attacker --replicas=0 -n attack-simulation --token=$GCP_TOKEN
-                            echo "✅ Attaquant neutralisé avec succès : Pod suspendu (Scale to 0)."
+                            # La politique réseau Layer 4 (Murs de feu) est maintenant supportée par le cluster !
+                            kubectl apply -f k8s/quarantine-networkpolicy.yaml --token=$GCP_TOKEN --validate=false
+                            echo "✅ Namespace attack-simulation mis en quarantaine réseau (Zero Trust Deny-All)."
                             sleep 5
-                            echo "📋 État du namespace après neutralisation :"
-                            kubectl get pods -n attack-simulation --token=$GCP_TOKEN
+                            echo "📋 État du namespace après quarantaine :"
+                            kubectl get networkpolicy -n attack-simulation --token=$GCP_TOKEN
                         '''
                     }
                 }

@@ -12,8 +12,13 @@ spec:
   policyTypes:
     - Egress
     - Ingress
-  # Deny ALL Ingress : personne ne peut entrer dans le namespace
-  ingress: []
+  # Autoriser l'Ingress uniquement sur le port 8089 (Dashboard Locust)
+  # Concept SOAR "Observation Cage" : On garde l'accès pour observer l'attaquant,
+  # mais on lui bloque toute possibilité d'attaquer le reste du cluster (Egress).
+  ingress:
+    - ports:
+        - port: 8089
+          protocol: TCP
   # Deny ALL Egress : le namespace ne peut plus envoyer de trafic vers l'extérieur
   egress:
     # Autoriser uniquement le DNS (port 53) pour éviter un crash complet du pod

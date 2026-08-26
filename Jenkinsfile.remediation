@@ -44,8 +44,6 @@ pipeline {
                         sh 'gcloud config unset auth/access_token_file || true'
                         sh 'mkdir -p ~/.config/gcloud && cp /tmp/gcp_adc.json ~/.config/gcloud/application_default_credentials.json'
                         sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --zone=europe-west1-b --project=zero-trust-mlops-pfe'
-                        // ✅ Zero Trust : quarantaine réseau du namespace attaquant via NetworkPolicy
-                        // Extraire le token d'accès directement via l'ADC
                         sh '''
                             export GCP_TOKEN=$(gcloud auth application-default print-access-token)
                             kubectl apply -f k8s/quarantine-networkpolicy.yaml --token=$GCP_TOKEN --validate=false

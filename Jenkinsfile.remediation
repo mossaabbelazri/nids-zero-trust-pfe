@@ -38,12 +38,11 @@ pipeline {
                     configuration: [vaultUrl: 'http://vault:8200', vaultCredentialId: 'vault-token-id'],
                     vaultSecrets: [[path: 'secret/gcp', engineVersion: 2, secretValues: [[envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']]]]
                 ) {
-                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
-                        // writeFile écrit le fichier sans corruption shell
+                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json", "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/tmp/gcp_adc.json"]) {
+                        // writeFile écrit le JSON sans corruption shell
                         script { writeFile file: '/tmp/gcp_adc.json', text: env.GOOGLE_CREDENTIALS }
-                        // Le secret est de type "authorized_user" (OAuth ADC) → on utilise gcloud auth login --cred-file
-                        sh 'gcloud auth login --cred-file=/tmp/gcp_adc.json --quiet'
-                        sh 'gcloud config set project zero-trust-mlops-pfe'
+                        // Pour authorized_user : copier vers l'emplacement ADC standard + utiliser CLOUDSDK override
+                        sh 'mkdir -p ~/.config/gcloud && cp /tmp/gcp_adc.json ~/.config/gcloud/application_default_credentials.json'
                         sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --zone=europe-west1-b --project=zero-trust-mlops-pfe'
                         // ✅ Zero Trust : quarantaine réseau du namespace attaquant via NetworkPolicy
                         sh 'kubectl apply -f k8s/quarantine-networkpolicy.yaml --validate=false'
@@ -65,11 +64,10 @@ pipeline {
                     configuration: [vaultUrl: 'http://vault:8200', vaultCredentialId: 'vault-token-id'],
                     vaultSecrets: [[path: 'secret/gcp', engineVersion: 2, secretValues: [[envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']]]]
                 ) {
-                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
+                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json", "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/tmp/gcp_adc.json"]) {
                         script { writeFile file: '/tmp/gcp_adc.json', text: env.GOOGLE_CREDENTIALS }
-                        // Le secret est de type "authorized_user" → gcloud auth login --cred-file
-                        sh 'gcloud auth login --cred-file=/tmp/gcp_adc.json --quiet'
-                        sh 'gcloud config set project zero-trust-mlops-pfe'
+                        // Pour authorized_user : copier vers l'emplacement ADC standard
+                        sh 'mkdir -p ~/.config/gcloud && cp /tmp/gcp_adc.json ~/.config/gcloud/application_default_credentials.json'
                         dir('terraform') {
                             sh 'rm -rf .terraform *.tfstate*'
                             sh 'terraform init -input=false'

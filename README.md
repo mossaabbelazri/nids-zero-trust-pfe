@@ -37,10 +37,11 @@ Ce projet implémente une **architecture DevSecOps complète et autonome** fond�
 | Objectif | Description |
 |:---|:---|
 | **Sécurité en Profondeur** | Chaque couche de l'infrastructure est sécurisée indépendamment (Code, Conteneur, Infrastructure, Réseau, Secrets). |
-| **Zero-Trust Réseau** | Chiffrement mTLS strict via Istio Service Mesh. Aucune communication inter-services sans authentification mutuelle. |
+| **Zero-Trust Applicatif (L7)** | Chiffrement mTLS strict via Istio Service Mesh. Aucune communication inter-services sans authentification mutuelle. |
+| **Zero-Trust Réseau (L4)** | Pare-feu Kubernetes (Calico) et NetworkPolicies strictes pour isoler les pods et bloquer les flux réseau malveillants à la source. |
 | **Gestion Dynamique des Secrets** | Injection Just-In-Time des identifiants via HashiCorp Vault. Aucun secret en dur dans le code source. |
 | **Filtrage WAF Externe** | Google Cloud Armor bloque le trafic malveillant (SQLi, XSS, DDoS) aux frontières du Cloud avant même d'atteindre le cluster. |
-| **Auto-Remédiation Autonome** | Boucle fermée Prometheus → Alertmanager → Jenkins → Terraform pour reconstruire automatiquement les nœuds compromis sans intervention humaine. |
+| **Auto-Remédiation & Forensics** | Boucle fermée (SOAR) : Prometheus → Alertmanager → Jenkins. Isomement autonome des attaquants dans une "Cage d'Observation" (NetworkPolicy) pour préserver les preuves. |
 
 ---
 
@@ -83,10 +84,10 @@ L'architecture repose sur **quatre piliers de sécurité** opérant en profondeu
         │                                                                 │
         │  Prometheus ──alerte──▶ Alertmanager ──webhook──▶ Jenkins       │
         │                                                     │           │
-        │                                    terraform apply -replace     │
-        │                                                     │           │
-        │  Nœud Sain Reconstruit ◀─────── Terraform (IaC) ◀──┘           │
-        └─────────────────────────────────────────────────────────────────┘
+        │                                    Application d'une NetworkPolicy      │
+        │                                                     │                   │
+        │  Attaquant Isolé (Cage) ◀────── Jenkins (Pipeline) ◀──┘                 │
+        └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -104,11 +105,12 @@ L'architecture repose sur **quatre piliers de sécurité** opérant en profondeu
 | **Scan IaC** | tfsec (Aqua Security) | Analyse statique de la configuration Terraform |
 | **Infrastructure as Code** | Terraform + GCS Backend | Provisionnement déclaratif du cluster GKE avec état distant |
 | **Orchestration Cloud** | Google Kubernetes Engine | Cluster Kubernetes managé avec Shielded Nodes |
-| **Service Mesh** | Istio | Chiffrement mTLS strict, observabilité réseau, injection de sidecars |
+| **Service Mesh (L7)** | Istio | Chiffrement mTLS strict, observabilité réseau, injection de sidecars |
+| **Firewall Réseau (L4)** | Calico | Implémentation des NetworkPolicies, isolation physique des pods, architecture Zero-Trust réseau |
 | **Gestion des Secrets** | HashiCorp Vault | Injection dynamique des identifiants GCP et MLflow au runtime |
 | **WAF** | Google Cloud Armor | Filtrage du trafic malveillant en amont via BackendConfig |
 | **Monitoring** | Prometheus + Grafana + Kiali | Surveillance temps réel, alertes, visualisation de la topologie réseau |
-| **Auto-Remédiation** | Alertmanager + Jenkins Webhook + Terraform | Reconstruction autonome des nœuds compromis |
+| **SOAR (Auto-Remédiation)** | Alertmanager + Jenkins Webhook | Isolation autonome des pods compromis via des NetworkPolicies (Quarantaine) |
 | **Simulation d'Attaque** | Locust | Simulation DDoS Layer 7 contrôlée pour tester la chaîne Zero-Trust → Auto-Remédiation |
 | **Tunnel Sécurisé** | Ngrok | Exposition sécurisée du webhook Jenkins pour Alertmanager |
 
@@ -141,6 +143,7 @@ nids-zero-trust-pfe/
 │   ├── nids-deployment.yaml       # Deployment + Service (annotations Vault + Cloud Armor)
 │   ├── nids-backendconfig.yaml    # BackendConfig Cloud Armor (WAF)
 │   ├── locust-attack.yaml         # Déploiement Locust (namespace isolé, hors mesh Istio)
+│   ├── quarantine-networkpolicy.yaml # Pare-feu Calico (Cage d'observation Forensics)
 │   ├── mlflow-deployment.yaml     # Déploiement MLflow sur GKE
 │   ├── modele-fraude.yaml         # Modèle de détection de fraude
 │   └── modele-nlp.yaml            # Modèle NLP
@@ -190,22 +193,30 @@ La boucle d'auto-remédiation permet au système de **prendre des décisions aut
  │  (Détection) │         │  (Routage)   │         │ (Remédiation) │
  └──────┬───────┘         └──────────────┘         └──────┬───────┘
         │                                                  │
-        │ Métriques Istio                    terraform apply -replace
-        │ (403/503, mTLS failures)                         │
+        │                                                  │
+        │ Métriques CPU / Réseau           kubectl apply -f quarantine.yaml
+        │                                                  │
         │                                                  ▼
- ┌──────┴───────┐                              ┌──────────────────┐
- │  Cluster GKE │◀─────── Nœud Sain ──────────│    Terraform     │
- │  (Surveillé) │         Reconstruit          │ (Reconstruction) │
- └──────────────┘                              └──────────────────┘
+ ┌──────┴───────┐                              ┌─────────────────────────┐
+ │  Cluster GKE │◀─────── Isolement ──────────│    Jenkins (SOAR)       │
+ │  (Surveillé) │         (NetworkPolicy)     │ (Mise en Quarantaine)   │
+ └──────────────┘                              └─────────────────────────┘
+
+### La stratégie Forensics : La Cage d'Observation (Sandbox)
+
+Plutôt que de détruire brutalement le pod de l'attaquant (ce qui effacerait toutes les preuves), l'auto-remédiation adopte une approche professionnelle de **SOC (Security Operations Center)** :
+1. Jenkins applique une **NetworkPolicy stricte** via le moteur **Calico**.
+2. Le trafic sortant (Egress) de l'attaquant est coupé physiquement. L'attaquant est incapable de nuire au reste du cluster.
+3. Le trafic entrant (Ingress) reste ouvert uniquement sur l'interface d'administration (ex: port 8089) pour permettre à l'équipe de sécurité d'observer le comportement du malware (Forensics) en toute sécurité.
 ```
 
 ### Fichiers Impliqués
 
 | Fichier | Rôle |
 |:---|:---|
-| `prometheus-rules.yml` | Définit la règle d'alerte `NodeCompromised` basée sur les métriques Istio (taux de requêtes 403/503 et connexions TCP rejetées) |
-| `alertmanager.yml` | Route l'alerte critique vers le webhook Jenkins (via Ngrok en lab) |
-| `Jenkinsfile.remediation` | Pipeline déclenché par le webhook : vérifie l'alerte, isole le nœud, et exécute `terraform apply -replace` pour reconstruire le pool de nœuds |
+| `prometheus-rules.yml` | Définit la règle d'alerte `NodeCompromised` basée sur l'usage CPU anormal d'un pod (symptôme d'une boucle d'attaque DDoS) |
+| `alertmanager.yml` | Route l'alerte critique vers le webhook Jenkins (via Ngrok en lab) et regroupe les alertes |
+| `Jenkinsfile.remediation` | Pipeline déclenché par le webhook : vérifie l'alerte et applique instantanément la `NetworkPolicy` de quarantaine pour isoler l'attaquant. |
 
 ---
 
@@ -328,14 +339,14 @@ kubectl port-forward svc/locust-service -n attack-simulation 8089:8089
 - **Host** : Déjà configuré (`http://nids-model-service.default.svc.cluster.local`)
 - Cliquer sur **Start swarming** pour lancer l'attaque
 
-**Cinématique automatique observée** :
-1. Locust envoie des centaines de requêtes HTTP vers `/health` et `/predict`.
-2. **100% des requêtes échouent** — Istio rejette toute connexion sans certificat mTLS valide.
-3. Les rejets TCP massifs génèrent un pic de la métrique `istio_tcp_connections_closed_total{response_flags="FI|UC"}`.
-4. Prometheus détecte que le taux dépasse le seuil (>10/min) → L'alerte `NodeCompromised` passe en état **FIRING**.
-5. Alertmanager route l'alerte vers le webhook Jenkins (via Ngrok).
-6. Le pipeline `NIDS-Auto-Remediation` se déclenche → Terraform reconstruit le pool de nœuds.
-7. Le cluster revient à un état sain avec des nœuds vierges.
+**Cinématique automatique observée (Le Piège Zero-Trust)** :
+1. Locust envoie des centaines de requêtes HTTP vers l'IA NIDS.
+2. La charge réseau anormale provoque un pic de CPU chez l'attaquant (détecté par Prometheus).
+3. L'alerte `NodeCompromised` passe en état **FIRING** et est transmise à Alertmanager.
+4. Alertmanager route l'alerte vers le webhook Jenkins.
+5. Le pipeline `NIDS-Auto-Remediation` se déclenche et déploie instantanément la **NetworkPolicy Calico**.
+6. **Le Piège se referme** : L'attaquant est coupé du réseau. Ses requêtes sont brutalement bloquées (Connection Refused). 
+7. **Preuve Forensics** : Le pod Locust, ne parvenant plus à envoyer de requêtes, boucle frénétiquement sur des erreurs, ce qui maintient son CPU dans un état fluctuant (pic de panique), fournissant la preuve visuelle sur Grafana que la menace est neutralisée et isolée dans la Sandbox !
 
 ```bash
 # Nettoyage après la démonstration

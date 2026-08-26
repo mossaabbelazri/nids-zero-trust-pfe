@@ -39,27 +39,13 @@ pipeline {
                     vaultSecrets: [[path: 'secret/gcp', engineVersion: 2, secretValues: [[envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']]]]
                 ) {
                     withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
-                        // writeFile évite la corruption JSON causée par shell echo
+                        // writeFile écrit le fichier sans corruption shell
                         script { writeFile file: '/tmp/gcp_adc.json', text: env.GOOGLE_CREDENTIALS }
-                        // Décodage automatique : si le secret Vault est en base64, on le décode
-                        sh '''
-                            FIRST_CHAR=$(head -c 1 /tmp/gcp_adc.json)
-                            if [ "$FIRST_CHAR" != "{" ]; then
-                                echo "[INFO] Secret non-JSON détecté, tentative de décodage base64..."
-                                base64 -d /tmp/gcp_adc.json > /tmp/gcp_decoded.json
-                                mv /tmp/gcp_decoded.json /tmp/gcp_adc.json
-                                echo "[OK] Décodage base64 réussi."
-                            else
-                                echo "[OK] Secret JSON valide détecté."
-                            fi
-                        '''
-                        // Authentification GCP + récupération du kubeconfig du cluster GKE
-                        sh 'gcloud auth activate-service-account --key-file=/tmp/gcp_adc.json'
+                        // Le secret est de type "authorized_user" (OAuth ADC) → on utilise gcloud auth login --cred-file
+                        sh 'gcloud auth login --cred-file=/tmp/gcp_adc.json --quiet'
+                        sh 'gcloud config set project zero-trust-mlops-pfe'
                         sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --zone=europe-west1-b --project=zero-trust-mlops-pfe'
-                        // ✅ Approche Zero Trust professionnelle : isoler le namespace attaquant
-                        // au niveau réseau via une NetworkPolicy (Deny All Egress/Ingress).
-                        // Le pod attaquant reste en vie mais toutes ses connexions sont coupées.
-                        // C'est la réponse SOAR réelle : isoler, ne pas supprimer (préserver les preuves).
+                        // ✅ Zero Trust : quarantaine réseau du namespace attaquant via NetworkPolicy
                         sh 'kubectl apply -f k8s/quarantine-networkpolicy.yaml --validate=false'
                         echo "✅ Namespace attack-simulation mis en quarantaine réseau (Zero Trust Deny-All)."
                         sh 'sleep 5'
@@ -80,16 +66,10 @@ pipeline {
                     vaultSecrets: [[path: 'secret/gcp', engineVersion: 2, secretValues: [[envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']]]]
                 ) {
                     withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json"]) {
-                        // writeFile évite la corruption JSON causée par shell echo
                         script { writeFile file: '/tmp/gcp_adc.json', text: env.GOOGLE_CREDENTIALS }
-                        // Décodage automatique si secret base64
-                        sh '''
-                            FIRST_CHAR=$(head -c 1 /tmp/gcp_adc.json)
-                            if [ "$FIRST_CHAR" != "{" ]; then
-                                base64 -d /tmp/gcp_adc.json > /tmp/gcp_decoded.json
-                                mv /tmp/gcp_decoded.json /tmp/gcp_adc.json
-                            fi
-                        '''
+                        // Le secret est de type "authorized_user" → gcloud auth login --cred-file
+                        sh 'gcloud auth login --cred-file=/tmp/gcp_adc.json --quiet'
+                        sh 'gcloud config set project zero-trust-mlops-pfe'
                         dir('terraform') {
                             sh 'rm -rf .terraform *.tfstate*'
                             sh 'terraform init -input=false'

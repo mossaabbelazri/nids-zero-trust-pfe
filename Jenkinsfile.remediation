@@ -38,11 +38,10 @@ pipeline {
                     configuration: [vaultUrl: 'http://vault:8200', vaultCredentialId: 'vault-token-id'],
                     vaultSecrets: [[path: 'secret/gcp', engineVersion: 2, secretValues: [[envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']]]]
                 ) {
-                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json", "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/tmp/gcp_adc.json"]) {
-                        // writeFile écrit le JSON sans corruption shell
-                        script { writeFile file: '/tmp/gcp_adc.json', text: env.GOOGLE_CREDENTIALS }
-                        // Pour authorized_user : copier vers l'emplacement ADC standard + utiliser CLOUDSDK override
-                        sh 'mkdir -p ~/.config/gcloud && cp /tmp/gcp_adc.json ~/.config/gcloud/application_default_credentials.json'
+                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_token", "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/tmp/gcp_token"]) {
+                        // Écrire le credential au chemin attendu par gcloud dans ce conteneur
+                        script { writeFile file: '/tmp/gcp_token', text: env.GOOGLE_CREDENTIALS }
+                        sh 'mkdir -p ~/.config/gcloud && cp /tmp/gcp_token ~/.config/gcloud/application_default_credentials.json'
                         sh 'gcloud container clusters get-credentials nids-zero-trust-cluster --zone=europe-west1-b --project=zero-trust-mlops-pfe'
                         // ✅ Zero Trust : quarantaine réseau du namespace attaquant via NetworkPolicy
                         sh 'kubectl apply -f k8s/quarantine-networkpolicy.yaml --validate=false'
@@ -64,10 +63,9 @@ pipeline {
                     configuration: [vaultUrl: 'http://vault:8200', vaultCredentialId: 'vault-token-id'],
                     vaultSecrets: [[path: 'secret/gcp', engineVersion: 2, secretValues: [[envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']]]]
                 ) {
-                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json", "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/tmp/gcp_adc.json"]) {
-                        script { writeFile file: '/tmp/gcp_adc.json', text: env.GOOGLE_CREDENTIALS }
-                        // Pour authorized_user : copier vers l'emplacement ADC standard
-                        sh 'mkdir -p ~/.config/gcloud && cp /tmp/gcp_adc.json ~/.config/gcloud/application_default_credentials.json'
+                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_token", "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/tmp/gcp_token"]) {
+                        script { writeFile file: '/tmp/gcp_token', text: env.GOOGLE_CREDENTIALS }
+                        sh 'mkdir -p ~/.config/gcloud && cp /tmp/gcp_token ~/.config/gcloud/application_default_credentials.json'
                         dir('terraform') {
                             sh 'rm -rf .terraform *.tfstate*'
                             sh 'terraform init -input=false'
@@ -84,7 +82,7 @@ pipeline {
     post {
         always {
             echo "Nettoyage final de l'espace de travail..."
-            sh 'rm -f /tmp/gcp_adc.json'
+            sh 'rm -f /tmp/gcp_token'
         }
     }
 }

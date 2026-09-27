@@ -50,8 +50,11 @@ def predict_traffic(flow: NetworkFlow):
         raise HTTPException(status_code=503, detail="Le modèle n'est pas encore prêt. Réessayez plus tard.")
         
     data = pd.DataFrame([flow.dict()])
-    prediction = model.predict(data)
-    is_attack = int(prediction[0]) == 1
+    import xgboost as xgb
+    dmatrix = xgb.DMatrix(data)
+    prediction = model.predict(dmatrix)
+    # prediction[0] is a float probability in booster, so we round it
+    is_attack = int(prediction[0] > 0.5)
     
     if is_attack:
         NIDS_ALERTS.inc()

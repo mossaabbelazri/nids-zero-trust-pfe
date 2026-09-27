@@ -289,7 +289,7 @@ Déploiement d'un pod intrus (Rogue Pod) depuis un namespace non autorisé :
 # Lancement d'un conteneur malveillant dans kube-system (hors du mesh Istio)
 kubectl run hacker-pod --image=curlimages/curl -n kube-system -it --rm -- sh
 
-# Tentative d'attaque DDoS sur le service NIDS
+# Tentative de communication avec le service NIDS
 while true; do
   curl -s -o /dev/null -w "Statut: %{http_code}\n" \
     http://nids-model-service.default.svc.cluster.local:5000/health
@@ -297,128 +297,80 @@ while true; do
 done
 ```
 
-**Résultat attendu** : Toutes les requêtes affichent `Statut: 000` — l'architecture Zero-Trust d'Istio intercepte et rejette l'attaque au niveau TCP car le pod intrus ne possède pas de certificat mTLS valide.
+**Résultat attendu** : Toutes les requêtes échouent avec `curl: (28) Failed to connect`. L'architecture Zero-Trust d'Istio intercepte et rejette l'attaque au niveau TCP car le pod intrus ne possède pas de certificat mTLS valide.
 
-### Scénario B : Déclenchement de la Boucle d'Auto-Remédiation
+### Scénario B : Validation de l'Inférence MLOps (XGBoost)
 
-Simulation de l'alerte `NodeCompromised` pour déclencher la chaîne complète :
+Simulation de l'envoi de flux réseau légitimes et malveillants vers l'API d'inférence pour valider le modèle d'IA :
 
-```powershell
-# Envoi du payload d'alerte Prometheus vers le webhook Jenkins (via Ngrok)
-curl -X POST -H "Content-Type: application/json" `
-  -d "{\"alerts\": [{\"labels\": {\"alertname\": \"NodeCompromised\", \"instance\": \"gke-nids-node-pool\"}, \"status\": \"firing\"}]}" `
-  "https://<VOTRE_URL_NGROK>.ngrok-free.dev/generic-webhook-trigger/invoke?token=secret-token-auto-remediation"
-```
+1. **Vérification de l'état** : Un appel à l'endpoint `/health` confirme que le modèle XGBoost est bien chargé depuis MLflow.
+2. **Flux Nominal** : Envoi d'un vecteur JSON représentant un trafic HTTPS standard (port 443). L'API retourne instantanément `{"status": "Sain", "action": "Allow"}`.
+3. **Flux Malveillant** : Envoi d'un vecteur représentant une attaque (ex: 5000 paquets envoyés, 0 reçus). L'API identifie l'anomalie, convertit dynamiquement la donnée en `xgb.DMatrix`, dépasse le seuil de 0.5, et retourne `{"status": "Attaque", "action": "Block"}`.
+4. **Mise à jour des métriques** : Le compteur Prometheus `/metrics` s'incrémente automatiquement (`nids_intrusion_alerts_total = 1.0`).
 
-**Cinématique automatique observée** :
-1. Ngrok intercepte la requête HTTP → Code `200 OK`.
-2. Le pipeline Jenkins `NIDS-Auto-Remediation` se déclenche **instantanément**.
-3. Jenkins s'authentifie sur GCP via Vault, télécharge l'état Terraform distant depuis le bucket GCS.
-4. Terraform exécute `terraform apply -replace="google_container_node_pool.mlops_nodes"` → Destruction chirurgicale et reconstruction du pool de nœuds.
-5. Le pipeline se termine avec le statut **SUCCESS**.
+### Scénario C : Déclenchement Organique de l'Auto-Remédiation (Locust)
 
-### Scénario C : Simulation d'Attaque DDoS Layer 7 avec Locust
-
-Déploiement d'un simulateur d'attaque **Locust** dans un namespace isolé (hors mesh Istio) pour déclencher la chaîne complète de manière **automatique et réaliste** :
+Déploiement d'un simulateur d'attaque **Locust** dans un namespace isolé (hors mesh Istio) pour déclencher la chaîne SOAR (Prometheus → Alertmanager → Jenkins → Calico) :
 
 ```bash
-# 1. Déploiement du simulateur d'attaque (namespace isolé, SANS Istio)
+# 1. Déploiement du simulateur d'attaque
 kubectl apply -f k8s/locust-attack.yaml
 
-# 2. Vérification : le pod Locust est prêt (1/1 — pas de sidecar !)
-kubectl get pods -n attack-simulation
-
-# 3. Accès au dashboard Locust (interface web temps réel)
+# 2. Accès au dashboard Locust (http://localhost:8089)
 kubectl port-forward svc/locust-service -n attack-simulation 8089:8089
-# → Ouvrir http://localhost:8089
 ```
 
-**Configuration de l'attaque dans l'interface Locust** :
-- **Number of users** : `50` (utilisateurs virtuels simultanés)
-- **Spawn rate** : `10` (nouveaux utilisateurs par seconde)
-- **Host** : Déjà configuré (`http://nids-model-service.default.svc.cluster.local`)
-- Cliquer sur **Start swarming** pour lancer l'attaque
-
-**Cinématique automatique observée (Le Piège Zero-Trust)** :
-1. Locust envoie des centaines de requêtes HTTP vers l'IA NIDS.
-2. La charge réseau anormale provoque un pic de CPU chez l'attaquant (détecté par Prometheus).
-3. L'alerte `NodeCompromised` passe en état **FIRING** et est transmise à Alertmanager.
-4. Alertmanager route l'alerte vers le webhook Jenkins.
-5. Le pipeline `NIDS-Auto-Remediation` se déclenche et déploie instantanément la **NetworkPolicy Calico**.
-6. **Le Piège se referme** : L'attaquant est coupé du réseau. Ses requêtes sont brutalement bloquées (Connection Refused). 
-7. **Preuve Forensics** : Le pod Locust, ne parvenant plus à envoyer de requêtes, boucle frénétiquement sur des erreurs, ce qui maintient son CPU dans un état fluctuant (pic de panique), fournissant la preuve visuelle sur Grafana que la menace est neutralisée et isolée dans la Sandbox !
-
-```bash
-# Nettoyage après la démonstration
-kubectl delete namespace attack-simulation
-```
-
-> ⚡ **Avantage par rapport au Scénario B** : Le Scénario C déclenche la boucle d'auto-remédiation de manière **organique** via de vraies métriques Istio, sans simulation manuelle d'alerte. C'est la preuve la plus convaincante pour le jury.
+**Cinématique automatique observée (Le Piège Forensique)** :
+1. Locust envoie des centaines de requêtes vers le NIDS (bloquées par Istio).
+2. Cet acharnement réseau provoque un pic de CPU chez l'attaquant, détecté par Prometheus via la règle `NodeCompromised`.
+3. L'alerte passe en état **FIRING** et est transmise à Alertmanager, qui déclenche le webhook Jenkins.
+4. Le pipeline `NIDS-Auto-Remediation` se lance et déploie instantanément une **NetworkPolicy Calico**.
+5. **Le Piège se referme** : Tout le trafic sortant (Egress) de l'attaquant est coupé physiquement.
+6. Le CPU de Locust explose (état de panique visible sur Grafana), prouvant que la menace est neutralisée et enfermée dans la Sandbox d'observation.
 
 ---
 
 ## 📸 Captures d'Écran et Résultats
 
-### Pipeline Jenkins — Toutes les étapes DevSecOps validées (SUCCESS)
-> Chacune des 7 étapes du pipeline CI/CD s'exécute séquentiellement avec succès, prouvant que le code, le conteneur, l'infrastructure et le déploiement respectent toutes les gates de sécurité.
-
-![Pipeline Jenkins — Étapes DevSecOps](screens/Stages.png)
-
----
-
 ### API NIDS — Documentation OpenAPI (Swagger)
-> L'API FastAPI expose trois endpoints : `/health` (liveness probe Kubernetes), `/predict` (classification du trafic réseau) et `/metrics` (métriques Prometheus).
+> L'API FastAPI expose trois endpoints essentiels pour l'architecture Cloud-Native : `/health`, `/predict` et `/metrics`.
 
 ![API NIDS Swagger](screens/apis.png)
 
 ---
 
-### Pods Kubernetes — Injection Sidecar Istio (2/2 READY)
-> Chaque pod affiche `2/2` dans la colonne READY, confirmant l'injection automatique du sidecar Envoy par Istio pour le chiffrement mTLS.
+### Inférence MLOps — Vérification de l'état (Health)
+> Validation préalable confirmant le chargement correct du modèle XGBoost en mémoire.
 
-![Pods Kubernetes avec Sidecars Istio](screens/pods.png)
-
----
-
-### Politique mTLS STRICT — Vérification Zero-Trust
-> La commande `kubectl get peerauthentication --all-namespaces` confirme l'application de la politique mTLS en mode `STRICT` sur le namespace `default`.
-
-![Politique mTLS STRICT](screens/mTLS.png)
+![Health Check](screens/health.png)
 
 ---
 
-### Preuve d'Attaque Bloquée — Protection Zero-Trust
-> Le pod intrus (hacker-pod) échoue systématiquement à contacter le service NIDS (`curl: (28) Failed to connect`). L'architecture Zero-Trust d'Istio rejette toute connexion sans certificat mTLS valide.
+### Inférence MLOps — Flux Légitime (Sain)
+> Le modèle analyse les caractéristiques du paquet et autorise le passage.
 
-![Preuve d'attaque bloquée par Istio mTLS](screens/Proof%20of%20attack.png)
-
----
-
-### Grafana — Vue d'Ensemble du Monitoring
-> Dashboard Grafana montrant les métriques temps réel : RPS (Requests Per Second), latence des requêtes, et état des alertes actives.
-
-![Grafana Overview](screens/Grafana%20Overview.png)
+![Flux Sain](screens/sain.png)
 
 ---
 
-### Grafana — Bande Passante du Pod NIDS
-> Monitoring de la bande passante réseau (Receive/Transmit) du pod `nids-model-deployment`, permettant de détecter les anomalies de trafic.
+### Inférence MLOps — Détection d'Attaque (Block)
+> Identification d'une anomalie statistique et déclenchement de l'instruction de blocage.
 
-![Bandwidth Monitoring](screens/Bandwidth.png)
-
----
-
-### Alertmanager — Vue d'Ensemble des Alertes
-> Dashboard Alertmanager dans Grafana montrant le nombre d'alertes actives et le taux de réception des notifications.
-
-![Alertmanager Overview](screens/AlertManager%20overview.png)
+![Flux Attaque](screens/attaque.png)
 
 ---
 
-### Auto-Remédiation — Reconstruction Autonome des Pods
-> Après la suppression d'un pod compromis, Kubernetes orchestre automatiquement la terminaison, la recréation (`Pending` → `Init` → `PodInitializing` → `Running`) et la réinjection du sidecar Istio.
+### Monitoring — Mise à jour des Métriques (Prometheus)
+> Incrémentation automatique du compteur `nids_intrusion_alerts_total` suite à la détection de l'attaque.
 
-![Auto-Remédiation des Pods](screens/Auto%20remediation.png)
+![Métriques Prometheus](screens/metrics.png)
+
+---
+
+### Auto-Remédiation — Isolation Forensique (CPU Panic)
+> Comparaison du CPU de l'attaquant avant et après l'application de la NetworkPolicy Calico. En bas, l'état d'emballement (panique) prouve l'isolement complet de la menace dans la sandbox.
+
+![Auto-Remédiation des Pods](screens/Auto_remediation.png)
 
 ---
 

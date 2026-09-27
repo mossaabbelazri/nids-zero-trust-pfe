@@ -370,7 +370,7 @@ kubectl port-forward svc/locust-service -n attack-simulation 8089:8089
 ### Auto-Remédiation — Isolation Forensique (CPU Panic)
 > Comparaison du CPU de l'attaquant avant et après l'application de la NetworkPolicy Calico. En bas, l'état d'emballement (panique) prouve l'isolement complet de la menace dans la sandbox.
 
-![Auto-Remédiation des Pods](screens/Auto-RemédiatonPods.png)
+![Auto-Remédiation des Pods](screens/AutoRemediationPods.png)
 
 ---
 

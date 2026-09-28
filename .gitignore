@@ -6,3 +6,4 @@ __pycache__/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+!nids-app/NIDS_XGBoost_Production.json

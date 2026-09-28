@@ -26,10 +26,17 @@ def load_model():
     try:
         print(f"Connexion au registre MLflow sur {MLFLOW_TRACKING_URI}...")
         model = mlflow.xgboost.load_model(f"models:/{MODEL_NAME}/{MODEL_STAGE}")
-        print("Succès : Modèle chargé en mémoire !")
+        print("Succès : Modèle chargé en mémoire depuis MLflow !")
     except Exception as e:
-        print(f"Alerte : Impossible de charger le modèle depuis MLflow. Raison : {e}")
-        # Le conteneur ne crash pas, mais passera en mode "dégradé"
+        print(f"Alerte : Impossible de charger depuis MLflow ({e}). Recherche du modèle local...")
+        local_path = os.path.join(os.path.dirname(__file__), "NIDS_XGBoost_Production.json")
+        if os.path.exists(local_path):
+            import xgboost as xgb
+            model = xgb.Booster()
+            model.load_model(local_path)
+            print("Succès : Modèle de secours chargé en local depuis NIDS_XGBoost_Production.json !")
+        else:
+            print("Avertissement : Aucun modèle local trouvé. Mode dégradé actif.")
 
 class NetworkFlow(BaseModel):
     destination_port: int

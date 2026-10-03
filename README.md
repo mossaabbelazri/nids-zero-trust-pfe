@@ -1,8 +1,8 @@
-# 🛡️ NIDS Zero-Trust : Architecture DevSecOps Autonome sur GKE
+# 🛡️ NIDS Zero-Trust: Autonomous DevSecOps Architecture on GKE
 
-> **Mémoire de Master** — Conception et Implémentation d'une Architecture DevSecOps Zero-Trust avec Auto-Remédiation pour le Déploiement Sécurisé d'un Modèle d'Intelligence Artificielle de Détection d'Intrusions Réseau (NIDS) sur Google Kubernetes Engine.
+> Design and Implementation of a Zero-Trust DevSecOps Architecture with Auto-Remediation for the Secure Deployment of a Network Intrusion Detection System (NIDS) Artificial Intelligence Model on Google Kubernetes Engine.
 
-[![Pipeline CI/CD](https://img.shields.io/badge/CI%2FCD-Jenkins-D24939?logo=jenkins&logoColor=white)](https://www.jenkins.io/)
+[![CI/CD Pipeline](https://img.shields.io/badge/CI%2FCD-Jenkins-D24939?logo=jenkins&logoColor=white)](https://www.jenkins.io/)
 [![IaC](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
 [![Cloud](https://img.shields.io/badge/Cloud-Google%20Cloud-4285F4?logo=googlecloud&logoColor=white)](https://cloud.google.com/)
 [![Service Mesh](https://img.shields.io/badge/Service%20Mesh-Istio-466BB0?logo=istio&logoColor=white)](https://istio.io/)
@@ -12,371 +12,371 @@
 
 ---
 
-## 📖 Table des Matières
+## 📖 Table of Contents
 
-- [Présentation du Projet](#-présentation-du-projet)
-- [Architecture Globale](#-architecture-globale)
-- [Stack Technologique](#-stack-technologique)
-- [Arborescence du Projet](#-arborescence-du-projet)
-- [Pipeline CI/CD DevSecOps (Jenkinsfile)](#-pipeline-cicd-devsecops-jenkinsfile)
-- [Boucle d'Auto-Remédiation](#-boucle-dauto-remédiation-closed-loop)
-- [Prérequis](#-prérequis)
-- [Guide de Déploiement](#-guide-de-déploiement)
-- [Démonstration et Tests de Sécurité](#-démonstration-et-tests-de-sécurité)
-- [Captures d'Écran et Résultats](#-captures-décran-et-résultats)
-- [Nettoyage de l'Infrastructure](#-nettoyage-de-linfrastructure-finops)
+- [Project Overview](#-project-overview)
+- [Global Architecture](#-global-architecture)
+- [Technology Stack](#-technology-stack)
+- [Project Structure](#-project-structure)
+- [DevSecOps CI/CD Pipeline (Jenkinsfile)](#-devsecops-cicd-pipeline-jenkinsfile)
+- [Auto-Remediation Loop (Closed-Loop)](#-auto-remediation-loop-closed-loop)
+- [Prerequisites](#-prerequisites)
+- [Deployment Guide](#-deployment-guide)
+- [Security Testing & Demonstration](#-security-testing--demonstration)
+- [Screenshots & Results](#-screenshots--results)
+- [Infrastructure Cleanup (FinOps)](#-infrastructure-cleanup-finops)
 
 ---
 
-## 🎯 Présentation du Projet
+## 🎯 Project Overview
 
-Ce projet implémente une **architecture DevSecOps complète et autonome** fondée sur le modèle de sécurité **Zero-Trust** ("Ne jamais faire confiance, toujours vérifier"). Il orchestre le déploiement sécurisé d'un **système de détection d'intrusions réseau (NIDS)** basé sur l'intelligence artificielle (modèle XGBoost entraîné via MLflow) sur un cluster **Google Kubernetes Engine (GKE)**.
+This project implements a **comprehensive and autonomous DevSecOps architecture** based on the **Zero-Trust** security model ("Never trust, always verify"). It orchestrates the secure deployment of a **Network Intrusion Detection System (NIDS)** powered by Artificial Intelligence (XGBoost model trained via MLflow) on a **Google Kubernetes Engine (GKE)** cluster.
 
-### Objectifs Clés
+### Key Objectives
 
-| Objectif | Description |
+| Objective | Description |
 |:---|:---|
-| **Sécurité en Profondeur** | Chaque couche de l'infrastructure est sécurisée indépendamment (Code, Conteneur, Infrastructure, Réseau, Secrets). |
-| **Zero-Trust Applicatif (L7)** | Chiffrement mTLS strict via Istio Service Mesh. Aucune communication inter-services sans authentification mutuelle. |
-| **Zero-Trust Réseau (L4)** | Pare-feu Kubernetes (Calico) et NetworkPolicies strictes pour isoler les pods et bloquer les flux réseau malveillants à la source. |
-| **Gestion Dynamique des Secrets** | Injection Just-In-Time des identifiants via HashiCorp Vault. Aucun secret en dur dans le code source. |
-| **Filtrage WAF Externe** | Google Cloud Armor bloque le trafic malveillant (SQLi, XSS, DDoS) aux frontières du Cloud avant même d'atteindre le cluster. |
-| **Auto-Remédiation & Forensics** | Boucle fermée (SOAR) : Prometheus → Alertmanager → Jenkins. Isomement autonome des attaquants dans une "Cage d'Observation" (NetworkPolicy) pour préserver les preuves. |
+| **Defense in Depth** | Each infrastructure layer is independently secured (Code, Container, Infrastructure, Network, Secrets). |
+| **Application Zero-Trust (L7)** | Strict mTLS encryption via Istio Service Mesh. No inter-service communication without mutual authentication. |
+| **Network Zero-Trust (L4)** | Kubernetes Firewall (Calico) and strict NetworkPolicies to isolate pods and block malicious network flows at the source. |
+| **Dynamic Secrets Management** | Just-In-Time credential injection via HashiCorp Vault. No hardcoded secrets in the source code. |
+| **External WAF Filtering** | Google Cloud Armor blocks malicious traffic (SQLi, XSS, DDoS) at the Cloud borders before it even reaches the cluster. |
+| **Auto-Remediation & Forensics** | Closed loop (SOAR): Prometheus → Alertmanager → Jenkins. Autonomous isolation of attackers into an "Observation Cage" (NetworkPolicy) to preserve evidence. |
 
 ---
 
-## 🏗️ Architecture Globale
+## 🏗️ Global Architecture
 
-L'architecture repose sur **quatre piliers de sécurité** opérant en profondeur et une **boucle d'auto-remédiation** fermée :
+The architecture relies on **four security pillars** operating in-depth and a closed **auto-remediation loop**:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                        INTERNET (Trafic Entrant)                        │
+│                        INTERNET (Inbound Traffic)                       │
 └───────────────────────────────┬─────────────────────────────────────────┘
                                 │
                     ┌───────────▼───────────┐
-                    │   Google Cloud Armor   │  ← Filtrage WAF (SQLi, XSS, DDoS)
+                    │   Google Cloud Armor   │  ← WAF Filtering (SQLi, XSS, DDoS)
                     │   (BackendConfig)      │
                     └───────────┬───────────┘
                                 │
 ┌───────────────────────────────▼─────────────────────────────────────────┐
 │                    Google Kubernetes Engine (GKE)                        │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                   Istio Service Mesh (mTLS STRICT)               │   │
+│  │                   Istio Service Mesh (STRICT mTLS)               │   │
 │  │                                                                  │   │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐  │   │
 │  │  │  NIDS Model   │  │   MLflow     │  │  Prometheus + Grafana │  │   │
-│  │  │  (FastAPI +   │  │  (Model      │  │  (Surveillance +      │  │   │
-│  │  │   XGBoost)    │  │   Registry)  │  │   Alertes)            │  │   │
+│  │  │  (FastAPI +   │  │  (Model      │  │  (Monitoring +        │  │   │
+│  │  │   XGBoost)    │  │   Registry)  │  │   Alerts)             │  │   │
 │  │  └──────┬───────┘  └──────────────┘  └───────────┬───────────┘  │   │
 │  │         │ /metrics (Prometheus)                    │              │   │
 │  │         └─────────────────────────────────────────┘              │   │
 │  │                                                                  │   │
 │  │  ┌──────────────────────┐                                       │   │
-│  │  │  Vault Agent Sidecar │  ← Injection dynamique des secrets    │   │
+│  │  │  Vault Agent Sidecar │  ← Dynamic secret injection           │   │
 │  │  └──────────────────────┘                                       │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
-│  Shielded Nodes : Secure Boot + Integrity Monitoring                    │
+│  Shielded Nodes: Secure Boot + Integrity Monitoring                     │
 └─────────────────────────────────────────────────────────────────────────┘
 
-        ┌──────────────────── BOUCLE D'AUTO-REMÉDIATION ─────────────────┐
+        ┌──────────────────── AUTO-REMEDIATION LOOP ─────────────────────┐
         │                                                                 │
-        │  Prometheus ──alerte──▶ Alertmanager ──webhook──▶ Jenkins       │
+        │  Prometheus ──alert───▶ Alertmanager ──webhook──▶ Jenkins       │
         │                                                     │           │
-        │                                    Application d'une NetworkPolicy      │
-        │                                                     │                   │
-        │  Attaquant Isolé (Cage) ◀────── Jenkins (Pipeline) ◀──┘                 │
-        └─────────────────────────────────────────────────────────────────────────┘
+        │                                      Apply NetworkPolicy        │
+        │                                                     │           │
+        │  Isolated Attacker (Cage) ◀──── Jenkins (Pipeline) ◀┘           │
+        └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚙️ Stack Technologique
+## ⚙️ Technology Stack
 
-| Couche | Outil | Rôle |
+| Layer | Tool | Role |
 |:---|:---|:---|
-| **Intelligence Artificielle** | XGBoost + MLflow | Modèle NIDS de classification binaire (Sain/Attaque) avec registre de modèles |
-| **API de Serving** | FastAPI + Uvicorn | API REST exposant `/predict`, `/health` et `/metrics` (Prometheus) |
-| **Conteneurisation** | Docker | Image immuable avec utilisateur non-root (`appuser`) |
-| **Orchestration CI/CD** | Jenkins | Pipeline déclaratif multi-étapes avec gates de sécurité |
-| **Scan SAST** | SonarQube | Analyse statique du code source |
-| **Scan CVE Conteneur** | Trivy (Aqua Security) | Détection des vulnérabilités critiques dans l'image Docker |
-| **Scan IaC** | tfsec (Aqua Security) | Analyse statique de la configuration Terraform |
-| **Infrastructure as Code** | Terraform + GCS Backend | Provisionnement déclaratif du cluster GKE avec état distant |
-| **Orchestration Cloud** | Google Kubernetes Engine | Cluster Kubernetes managé avec Shielded Nodes |
-| **Service Mesh (L7)** | Istio | Chiffrement mTLS strict, observabilité réseau, injection de sidecars |
-| **Firewall Réseau (L4)** | Calico | Implémentation des NetworkPolicies, isolation physique des pods, architecture Zero-Trust réseau |
-| **Gestion des Secrets** | HashiCorp Vault | Injection dynamique des identifiants GCP et MLflow au runtime |
-| **WAF** | Google Cloud Armor | Filtrage du trafic malveillant en amont via BackendConfig |
-| **Monitoring** | Prometheus + Grafana + Kiali | Surveillance temps réel, alertes, visualisation de la topologie réseau |
-| **SOAR (Auto-Remédiation)** | Alertmanager + Jenkins Webhook | Isolation autonome des pods compromis via des NetworkPolicies (Quarantaine) |
-| **Simulation d'Attaque** | Locust | Simulation DDoS Layer 7 contrôlée pour tester la chaîne Zero-Trust → Auto-Remédiation |
-| **Tunnel Sécurisé** | Ngrok | Exposition sécurisée du webhook Jenkins pour Alertmanager |
+| **Artificial Intelligence** | XGBoost + MLflow | Binary classification NIDS model (Healthy/Attack) with model registry |
+| **Serving API** | FastAPI + Uvicorn | REST API exposing `/predict`, `/health`, and `/metrics` (Prometheus) |
+| **Containerization** | Docker | Immutable image with a non-root user (`appuser`) |
+| **CI/CD Orchestration** | Jenkins | Declarative multi-stage pipeline with security gates |
+| **SAST Scan** | SonarQube | Static Application Security Testing on the source code |
+| **Container CVE Scan** | Trivy (Aqua Security) | Detection of critical vulnerabilities in the Docker image |
+| **IaC Scan** | tfsec (Aqua Security) | Static analysis of the Terraform configuration |
+| **Infrastructure as Code** | Terraform + GCS Backend | Declarative provisioning of the GKE cluster with remote state |
+| **Cloud Orchestration** | Google Kubernetes Engine | Managed Kubernetes cluster with Shielded Nodes |
+| **Service Mesh (L7)** | Istio | Strict mTLS encryption, network observability, sidecar injection |
+| **Network Firewall (L4)** | Calico | Implementation of NetworkPolicies, physical pod isolation, network Zero-Trust architecture |
+| **Secrets Management** | HashiCorp Vault | Dynamic injection of GCP and MLflow credentials at runtime |
+| **WAF** | Google Cloud Armor | Filtering malicious traffic upstream via BackendConfig |
+| **Monitoring** | Prometheus + Grafana + Kiali | Real-time surveillance, alerts, network topology visualization |
+| **SOAR (Auto-Remediation)**| Alertmanager + Jenkins Webhook | Autonomous isolation of compromised pods via NetworkPolicies (Quarantine) |
+| **Attack Simulation** | Locust | Controlled Layer 7 DDoS simulation to test the Zero-Trust → Auto-Remediation chain |
+| **Secure Tunnel** | Ngrok | Secure exposure of the Jenkins webhook for Alertmanager |
 
 ---
 
-## 📂 Arborescence du Projet
+## 📂 Project Structure
 
-```
+```text
 nids-zero-trust-pfe/
 │
-├── Jenkinsfile                    # Pipeline CI/CD principal (7 étapes DevSecOps)
-├── Jenkinsfile.remediation        # Pipeline d'auto-remédiation (Generic Webhook Trigger)
-├── Dockerfile.jenkins             # Image Jenkins personnalisée (Docker, Terraform, gcloud, kubectl)
-├── docker-compose.yml             # Orchestration locale (Jenkins + Vault + MLflow)
-├── .gitignore                     # Exclusion des fichiers sensibles et états Terraform
+├── Jenkinsfile                    # Main CI/CD pipeline (7 DevSecOps stages)
+├── Jenkinsfile.remediation        # Auto-remediation pipeline (Generic Webhook Trigger)
+├── Dockerfile.jenkins             # Custom Jenkins image (Docker, Terraform, gcloud, kubectl)
+├── docker-compose.yml             # Local orchestration (Jenkins + Vault + MLflow)
+├── .gitignore                     # Exclusion of sensitive files and Terraform states
 │
-├── nids-app/                      # Application IA (Modèle NIDS)
-│   ├── main.py                    # API FastAPI (predict, health, metrics Prometheus)
-│   ├── Dockerfile                 # Image Docker sécurisée (non-root)
-│   ├── requirements.txt           # Dépendances Python
-│   └── .trivyignore               # Exclusions Trivy
+├── nids-app/                      # AI Application (NIDS Model)
+│   ├── main.py                    # FastAPI API (predict, health, Prometheus metrics)
+│   ├── Dockerfile                 # Secure Docker image (non-root)
+│   ├── requirements.txt           # Python dependencies
+│   └── .trivyignore               # Trivy exclusions
 │
-├── locust/                        # Simulation d'Attaque (Chaos Engineering)
-│   └── locustfile.py              # Script DDoS Layer 7 (HTTP Flood contrôlé)
+├── locust/                        # Attack Simulation (Chaos Engineering)
+│   └── locustfile.py              # Layer 7 DDoS Script (Controlled HTTP Flood)
 │
 ├── terraform/                     # Infrastructure as Code
-│   └── main.tf                    # Cluster GKE + Shielded Nodes + Backend GCS distant
+│   └── main.tf                    # GKE Cluster + Shielded Nodes + GCS remote backend
 │
-├── k8s/                           # Manifestes Kubernetes
-│   ├── nids-deployment.yaml       # Deployment + Service (annotations Vault + Cloud Armor)
-│   ├── nids-backendconfig.yaml    # BackendConfig Cloud Armor (WAF)
-│   ├── locust-attack.yaml         # Déploiement Locust (namespace isolé, hors mesh Istio)
-│   ├── quarantine-networkpolicy.yaml # Pare-feu Calico (Cage d'observation Forensics)
-│   ├── mlflow-deployment.yaml     # Déploiement MLflow sur GKE
-│   ├── modele-fraude.yaml         # Modèle de détection de fraude
-│   └── modele-nlp.yaml            # Modèle NLP
+├── k8s/                           # Kubernetes Manifests
+│   ├── nids-deployment.yaml       # Deployment + Service (Vault + Cloud Armor annotations)
+│   ├── nids-backendconfig.yaml    # Cloud Armor BackendConfig (WAF)
+│   ├── locust-attack.yaml         # Locust Deployment (isolated namespace, outside Istio mesh)
+│   ├── quarantine-networkpolicy.yaml # Calico Firewall (Forensics observation cage)
+│   ├── mlflow-deployment.yaml     # MLflow deployment on GKE
+│   ├── modele-fraude.yaml         # Fraud detection model
+│   └── modele-nlp.yaml            # NLP model
 │
-├── alertmanager.yml               # Configuration Alertmanager (routage webhook Jenkins)
-├── prometheus-rules.yml           # Règles d'alertes Prometheus (NodeCompromised)
-└── prometheus-config.yaml         # PrometheusRule CRD pour Kube-Prometheus Operator
+├── alertmanager.yml               # Alertmanager configuration (Jenkins webhook routing)
+├── prometheus-rules.yml           # Prometheus alert rules (NodeCompromised)
+└── prometheus-config.yaml         # PrometheusRule CRD for Kube-Prometheus Operator
 ```
 
 ---
 
-## 🔄 Pipeline CI/CD DevSecOps (Jenkinsfile)
+## 🔄 DevSecOps CI/CD Pipeline (Jenkinsfile)
 
-Le pipeline principal exécute **7 étapes séquentielles** avec des gates de sécurité à chaque niveau :
+The main pipeline executes **7 sequential stages** with security gates at every level:
 
-```
+```text
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
 │ 1. SAST      │───▶│ 2. Docker    │───▶│ 3. Trivy     │───▶│ 4. tfsec     │
-│ (SonarQube)  │    │ (Build)      │    │ (Scan CVE)   │    │ (Scan IaC)   │
+│ (SonarQube)  │    │ (Build)      │    │ (CVE Scan)   │    │ (IaC Scan)   │
 └──────────────┘    └──────────────┘    └──────────────┘    └──────┬───────┘
                                                                    │
 ┌──────────────┐    ┌──────────────┐    ┌──────────────────────────▼───────┐
-│ 7. ConfigMap │◀───│ 6. Déploiement│◀──│ 5. Vault + Terraform            │
-│ (Monitoring) │    │ GKE + Istio  │    │ (Secrets + Cluster GKE)         │
+│ 7. ConfigMap │◀───│ 6. GKE + Istio│◀──│ 5. Vault + Terraform            │
+│ (Monitoring) │    │ Deployment   │    │ (Secrets + GKE Cluster)         │
 └──────────────┘    └──────────────┘    └─────────────────────────────────┘
 ```
 
-| Étape | Nom | Description |
+| Stage | Name | Description |
 |:---|:---|:---|
-| 1 | Sécurité du Code (SAST) | Scan SonarQube du code FastAPI |
-| 2 | Conteneurisation (Docker) | Build de l'image Docker immuable |
-| 3 | Sécurité du Conteneur (Trivy) | Scan des vulnérabilités CVE critiques |
-| 4 | Sécurité de l'Infrastructure (tfsec) | Analyse statique du code Terraform |
-| 5 | Déploiement Zero-Trust (Vault + Terraform) | Récupération sécurisée des secrets GCP via Vault, provisionnement du cluster GKE |
-| 5.5 | Build & Push du Modèle NIDS | Construction et publication de l'image Docker sur Docker Hub |
-| 6 | Déploiement sur GKE | Installation d'Istio (mTLS STRICT), déploiement des manifestes K8s, injection des ConfigMaps de monitoring |
+| 1 | Code Security (SAST) | SonarQube scan of the FastAPI code |
+| 2 | Containerization (Docker) | Immutable Docker image build |
+| 3 | Container Security (Trivy) | Scan for critical CVE vulnerabilities |
+| 4 | Infrastructure Security (tfsec) | Static analysis of Terraform code |
+| 5 | Zero-Trust Deployment (Vault + TF)| Secure retrieval of GCP secrets via Vault, GKE cluster provisioning |
+| 5.5 | NIDS Model Build & Push | Build and publish the Docker image on Docker Hub |
+| 6 | Deployment on GKE | Istio installation (STRICT mTLS), K8s manifests deployment, monitoring ConfigMaps injection |
 
 ---
 
-## 🔁 Boucle d'Auto-Remédiation (Closed-Loop)
+## 🔁 Auto-Remediation Loop (Closed-Loop)
 
-La boucle d'auto-remédiation permet au système de **prendre des décisions autonomes** en cas de compromission, sans intervention humaine :
+The auto-remediation loop allows the system to **make autonomous decisions** in case of compromise, without human intervention:
 
-```
+```text
  ┌──────────────┐         ┌──────────────┐         ┌──────────────┐
- │  Prometheus  │──alerte─▶│ Alertmanager │──webhook─▶│   Jenkins    │
- │  (Détection) │         │  (Routage)   │         │ (Remédiation) │
+ │  Prometheus  │──alert──▶ Alertmanager │─webhook─▶   Jenkins    │
+ │ (Detection)  │         │  (Routing)   │         │(Remediation) │
  └──────┬───────┘         └──────────────┘         └──────┬───────┘
-        │                                                  │
-        │                                                  │
-        │ Métriques CPU / Réseau           kubectl apply -f quarantine.yaml
-        │                                                  │
-        │                                                  ▼
+        │                                                 │
+        │                                                 │
+        │ CPU / Network Metrics          kubectl apply -f quarantine.yaml
+        │                                                 │
+        │                                                 ▼
  ┌──────┴───────┐                              ┌─────────────────────────┐
- │  Cluster GKE │◀─────── Isolement ──────────│    Jenkins (SOAR)       │
- │  (Surveillé) │         (NetworkPolicy)     │ (Mise en Quarantaine)   │
+ │ GKE Cluster  │◀────── Isolation ────────────│    Jenkins (SOAR)       │
+ │ (Monitored)  │        (NetworkPolicy)       │ (Quarantine Enforced)   │
  └──────────────┘                              └─────────────────────────┘
-
-### La stratégie Forensics : La Cage d'Observation (Sandbox)
-
-Plutôt que de détruire brutalement le pod de l'attaquant (ce qui effacerait toutes les preuves), l'auto-remédiation adopte une approche professionnelle de **SOC (Security Operations Center)** :
-1. Jenkins applique une **NetworkPolicy stricte** via le moteur **Calico**.
-2. Le trafic sortant (Egress) de l'attaquant est coupé physiquement. L'attaquant est incapable de nuire au reste du cluster.
-3. Le trafic entrant (Ingress) reste ouvert uniquement sur l'interface d'administration (ex: port 8089) pour permettre à l'équipe de sécurité d'observer le comportement du malware (Forensics) en toute sécurité.
 ```
 
-### Fichiers Impliqués
+### The Forensics Strategy: The Observation Cage (Sandbox)
 
-| Fichier | Rôle |
+Rather than brutally destroying the attacker's pod (which would erase all evidence), auto-remediation adopts a professional **SOC (Security Operations Center)** approach:
+1. Jenkins applies a **strict NetworkPolicy** via the **Calico** engine.
+2. The attacker's outbound traffic (Egress) is physically cut off. The attacker is unable to harm the rest of the cluster.
+3. Inbound traffic (Ingress) remains open only on the administration interface (e.g., port 8089) to allow the security team to safely observe the malware's behavior (Forensics).
+
+### Files Involved
+
+| File | Role |
 |:---|:---|
-| `prometheus-rules.yml` | Définit la règle d'alerte `NodeCompromised` basée sur l'usage CPU anormal d'un pod (symptôme d'une boucle d'attaque DDoS) |
-| `alertmanager.yml` | Route l'alerte critique vers le webhook Jenkins (via Ngrok en lab) et regroupe les alertes |
-| `Jenkinsfile.remediation` | Pipeline déclenché par le webhook : vérifie l'alerte et applique instantanément la `NetworkPolicy` de quarantaine pour isoler l'attaquant. |
+| `prometheus-rules.yml` | Defines the `NodeCompromised` alert rule based on abnormal pod CPU usage (symptom of a DDoS attack loop) |
+| `alertmanager.yml` | Routes the critical alert to the Jenkins webhook (via Ngrok in lab) and groups alerts |
+| `Jenkinsfile.remediation` | Pipeline triggered by the webhook: verifies the alert and instantly applies the quarantine `NetworkPolicy` to isolate the attacker. |
 
 ---
 
-## 📋 Prérequis
+## 📋 Prerequisites
 
-| Outil | Version Minimale | Usage |
+| Tool | Minimum Version | Usage |
 |:---|:---|:---|
-| Docker Desktop | 24.x | Exécution locale de Jenkins, Vault, MLflow |
-| Google Cloud SDK | Latest | Authentification et gestion GCP |
-| Terraform | 1.5+ | Provisionnement du cluster GKE |
-| Ngrok | 3.x | Tunnel HTTPS pour le webhook Jenkins |
-| Compte GCP | — | Projet `zero-trust-mlops-pfe` configuré |
+| Docker Desktop | 24.x | Local execution of Jenkins, Vault, MLflow |
+| Google Cloud SDK | Latest | GCP authentication and management |
+| Terraform | 1.5+ | Provisioning of the GKE cluster |
+| Ngrok | 3.x | HTTPS tunnel for the Jenkins webhook |
+| GCP Account | — | Configured `zero-trust-mlops-pfe` project |
 
 ---
 
-## 🚀 Guide de Déploiement
+## 🚀 Deployment Guide
 
-### Étape 1 : Initialisation de l'Environnement Local
+### Step 1: Local Environment Initialization
 
 ```bash
-# Démarrage de l'infrastructure locale (Jenkins + Vault + MLflow)
+# Start the local infrastructure (Jenkins + Vault + MLflow)
 docker-compose up -d
 
-# Vérification : Jenkins accessible sur http://localhost:8080
+# Verification: Jenkins accessible at http://localhost:8080
 
-# Lancement du tunnel Ngrok pour exposer le webhook Jenkins
+# Launch Ngrok tunnel to expose the Jenkins webhook
 ngrok http 8080
-# ⚠️ Copiez l'URL HTTPS générée et mettez à jour alertmanager.yml
+# ⚠️ Copy the generated HTTPS URL and update alertmanager.yml
 ```
 
-### Étape 2 : Déploiement de l'Infrastructure Cloud (IaC)
+### Step 2: Cloud Infrastructure Deployment (IaC)
 
 ```bash
 cd terraform/
-terraform init          # Synchronisation avec le backend GCS distant
-terraform apply -auto-approve  # Provisionnement du cluster GKE
+terraform init          # Sync with the remote GCS backend
+terraform apply -auto-approve  # Provision the GKE cluster
 
-# Récupération des identifiants kubectl
+# Retrieve kubectl credentials
 gcloud container clusters get-credentials nids-zero-trust-cluster \
   --zone europe-west1-b --project zero-trust-mlops-pfe
 ```
 
-### Étape 3 : Exécution du Pipeline Jenkins
+### Step 3: Execute the Jenkins Pipeline
 
-1. Accédez à Jenkins (`http://localhost:8080`).
-2. Sélectionnez le pipeline **NIDS-Deployment** → **Build Now**.
-3. Le pipeline déploie automatiquement : Istio mTLS, les manifestes K8s, les ConfigMaps de monitoring.
+1. Access Jenkins (`http://localhost:8080`).
+2. Select the **NIDS-Deployment** pipeline → **Build Now**.
+3. The pipeline automatically deploys: Istio mTLS, K8s manifests, and monitoring ConfigMaps.
 
-### Étape 4 : Activation du Centre de Contrôle (SOC)
+### Step 4: Control Center Activation (SOC)
 
 ```bash
-# Terminal 1 : Grafana (Dashboard de monitoring)
+# Terminal 1: Grafana (Monitoring dashboard)
 kubectl port-forward svc/grafana -n monitoring 3000:3000
-# Accès : http://localhost:3000 (admin/admin)
+# Access: http://localhost:3000 (admin/admin)
 
-# Terminal 2 : Kiali (Topologie réseau Istio)
+# Terminal 2: Kiali (Istio network topology)
 kubectl port-forward svc/kiali -n istio-system 20001:20001
-# Accès : http://localhost:20001
+# Access: http://localhost:20001
 ```
 
 ---
 
-## ⚔️ Démonstration et Tests de Sécurité
+## ⚔️ Security Testing & Demonstration
 
-### Scénario A : Preuve de la Protection mTLS Hermétique
+### Scenario A: Proof of Hermetic mTLS Protection
 
-Déploiement d'un pod intrus (Rogue Pod) depuis un namespace non autorisé :
+Deployment of an intruder pod (Rogue Pod) from an unauthorized namespace:
 
 ```bash
-# Lancement d'un conteneur malveillant dans kube-system (hors du mesh Istio)
+# Launch a malicious container in kube-system (outside the Istio mesh)
 kubectl run hacker-pod --image=curlimages/curl -n kube-system -it --rm -- sh
 
-# Tentative de communication avec le service NIDS
+# Attempt to communicate with the NIDS service
 while true; do
-  curl -s -o /dev/null -w "Statut: %{http_code}\n" \
+  curl -s -o /dev/null -w "Status: %{http_code}\n" \
     http://nids-model-service.default.svc.cluster.local:5000/health
   sleep 0.1
 done
 ```
 
-**Résultat attendu** : Toutes les requêtes échouent avec `curl: (28) Failed to connect`. L'architecture Zero-Trust d'Istio intercepte et rejette l'attaque au niveau TCP car le pod intrus ne possède pas de certificat mTLS valide.
+**Expected Result**: All requests fail with `curl: (28) Failed to connect`. Istio's Zero-Trust architecture intercepts and rejects the attack at the TCP level because the intruder pod lacks a valid mTLS certificate.
 
-### Scénario B : Validation de l'Inférence MLOps (XGBoost)
+### Scenario B: MLOps Inference Validation (XGBoost)
 
-Simulation de l'envoi de flux réseau légitimes et malveillants vers l'API d'inférence pour valider le modèle d'IA :
+Simulation of sending legitimate and malicious network flows to the inference API to validate the AI model:
 
-1. **Vérification de l'état** : Un appel à l'endpoint `/health` confirme que le modèle XGBoost est bien chargé depuis MLflow.
-2. **Flux Nominal** : Envoi d'un vecteur JSON représentant un trafic HTTPS standard (port 443). L'API retourne instantanément `{"status": "Sain", "action": "Allow"}`.
-3. **Flux Malveillant** : Envoi d'un vecteur représentant une attaque (ex: 5000 paquets envoyés, 0 reçus). L'API identifie l'anomalie, convertit dynamiquement la donnée en `xgb.DMatrix`, dépasse le seuil de 0.5, et retourne `{"status": "Attaque", "action": "Block"}`.
-4. **Mise à jour des métriques** : Le compteur Prometheus `/metrics` s'incrémente automatiquement (`nids_intrusion_alerts_total = 1.0`).
+1. **Health Check**: A call to the `/health` endpoint confirms that the XGBoost model is correctly loaded from MLflow.
+2. **Nominal Flow**: Sending a JSON vector representing standard HTTPS traffic (port 443). The API instantly returns `{"status": "Healthy", "action": "Allow"}`.
+3. **Malicious Flow**: Sending a vector representing an attack (e.g., 5000 packets sent, 0 received). The API identifies the anomaly, dynamically converts the data into `xgb.DMatrix`, exceeds the 0.5 threshold, and returns `{"status": "Attack", "action": "Block"}`.
+4. **Metrics Update**: The Prometheus `/metrics` counter automatically increments (`nids_intrusion_alerts_total = 1.0`).
 
-### Scénario C : Déclenchement Organique de l'Auto-Remédiation (Locust)
+### Scenario C: Organic Triggering of Auto-Remediation (Locust)
 
-Déploiement d'un simulateur d'attaque **Locust** dans un namespace isolé (hors mesh Istio) pour déclencher la chaîne SOAR (Prometheus → Alertmanager → Jenkins → Calico) :
+Deployment of a **Locust** attack simulator in an isolated namespace (outside the Istio mesh) to trigger the SOAR chain (Prometheus → Alertmanager → Jenkins → Calico):
 
 ```bash
-# 1. Déploiement du simulateur d'attaque
+# 1. Deploy the attack simulator
 kubectl apply -f k8s/locust-attack.yaml
 
-# 2. Accès au dashboard Locust (http://localhost:8089)
+# 2. Access the Locust dashboard (http://localhost:8089)
 kubectl port-forward svc/locust-service -n attack-simulation 8089:8089
 ```
 
-**Cinématique automatique observée (Le Piège Forensique)** :
-1. Locust envoie des centaines de requêtes vers le NIDS (bloquées par Istio).
-2. Cet acharnement réseau provoque un pic de CPU chez l'attaquant, détecté par Prometheus via la règle `NodeCompromised`.
-3. L'alerte passe en état **FIRING** et est transmise à Alertmanager, qui déclenche le webhook Jenkins.
-4. Le pipeline `NIDS-Auto-Remediation` se lance et déploie instantanément une **NetworkPolicy Calico**.
-5. **Le Piège se referme** : Tout le trafic sortant (Egress) de l'attaquant est coupé physiquement.
-6. Le CPU de Locust explose (état de panique visible sur Grafana), prouvant que la menace est neutralisée et enfermée dans la Sandbox d'observation.
+**Observed Automatic Kinematics (The Forensic Trap)**:
+1. Locust sends hundreds of requests to the NIDS (blocked by Istio).
+2. This network relentless assault causes a CPU spike on the attacker's end, detected by Prometheus via the `NodeCompromised` rule.
+3. The alert shifts to the **FIRING** state and is forwarded to Alertmanager, which triggers the Jenkins webhook.
+4. The `NIDS-Auto-Remediation` pipeline is launched and instantly deploys a **Calico NetworkPolicy**.
+5. **The Trap Closes**: All outbound traffic (Egress) from the attacker is physically cut off.
+6. Locust's CPU spikes out of control (panic state visible on Grafana), proving that the threat is neutralized and locked in the observation Sandbox.
 
 ---
 
-## 📸 Captures d'Écran et Résultats
+## 📸 Screenshots and Results
 
-### API NIDS — Documentation OpenAPI (Swagger)
-> L'API FastAPI expose trois endpoints essentiels pour l'architecture Cloud-Native : `/health`, `/predict` et `/metrics`.
+### NIDS API — OpenAPI Documentation (Swagger)
+> The FastAPI API exposes three essential endpoints for the Cloud-Native architecture: `/health`, `/predict`, and `/metrics`.
 
-![API NIDS Swagger](screens/apis.png)
+![NIDS API Swagger](screens/apis.png)
 
 ---
 
-### Inférence MLOps — Vérification de l'état (Health)
-> Validation préalable confirmant le chargement correct du modèle XGBoost en mémoire.
+### MLOps Inference — Health Check
+> Preliminary validation confirming the correct loading of the XGBoost model in memory.
 
 ![Health Check](screens/health.png)
 
 ---
 
-### Inférence MLOps — Flux Légitime (Sain)
-> Le modèle analyse les caractéristiques du paquet et autorise le passage.
+### MLOps Inference — Legitimate Flow (Healthy)
+> The model analyzes the packet characteristics and allows passage.
 
-![Flux Sain](screens/sain.png)
-
----
-
-### Inférence MLOps — Détection d'Attaque (Block)
-> Identification d'une anomalie statistique et déclenchement de l'instruction de blocage.
-
-![Flux Attaque](screens/attaque.png)
+![Healthy Flow](screens/sain.png)
 
 ---
 
-### Monitoring — Mise à jour des Métriques (Prometheus)
-> Incrémentation automatique du compteur `nids_intrusion_alerts_total` suite à la détection de l'attaque.
+### MLOps Inference — Attack Detection (Block)
+> Identification of a statistical anomaly and triggering of the blocking instruction.
 
-![Métriques Prometheus](screens/metrics.png)
-
----
-
-### Auto-Remédiation — Isolation Forensique (CPU Panic)
-> Comparaison du CPU de l'attaquant avant et après l'application de la NetworkPolicy Calico. En bas, l'état d'emballement (panique) prouve l'isolement complet de la menace dans la sandbox.
-
-![Auto-Remédiation des Pods](screens/AutoRemediationPods.png)
+![Attack Flow](screens/attaque.png)
 
 ---
 
-## 🗑️ Nettoyage de l'Infrastructure (FinOps)
+### Monitoring — Metrics Update (Prometheus)
+> Automatic incrementation of the `nids_intrusion_alerts_total` counter following attack detection.
 
-Une fois la démonstration terminée, détruisez toutes les ressources Cloud pour éviter toute facturation résiduelle :
+![Prometheus Metrics](screens/metrics.png)
+
+---
+
+### Auto-Remediation — Forensic Isolation (CPU Panic)
+> Comparison of the attacker's CPU before and after applying the Calico NetworkPolicy. At the bottom, the runaway (panic) state proves complete isolation of the threat in the sandbox.
+
+![Pod Auto-Remediation](screens/AutoRemediationPods.png)
+
+---
+
+## 🗑️ Infrastructure Cleanup (FinOps)
+
+Once the demonstration is over, destroy all Cloud resources to prevent any residual billing:
 
 ```bash
 cd terraform/
@@ -385,7 +385,7 @@ terraform destroy -auto-approve
 
 ---
 
-## 👤 Auteur
+## 👤 Author
 
 **Mossaab Belazri** 
 
@@ -393,6 +393,6 @@ terraform destroy -auto-approve
 
 ---
 
-## 📄 Licence
+## 📄 License
 
-Ce projet est développé dans le cadre d'un mémoire de Master et est destiné à des fins académiques.
+This project is open-source and available under the Apache License 2.0.

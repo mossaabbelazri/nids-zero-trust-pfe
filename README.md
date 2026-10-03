@@ -395,4 +395,4 @@ terraform destroy -auto-approve
 
 ## 📄 License
 
-This project is open-source and available under the Apache License 2.0.
+This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.

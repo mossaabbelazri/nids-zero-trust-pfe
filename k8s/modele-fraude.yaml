@@ -23,4 +23,4 @@ spec:
             - name: MODEL_NAME
               value: "FRAUD_DETECTION_RF" # K8s charge le modèle de fraude
           ports:
-            - containerPort: 5000
+            - containerPort: 8000

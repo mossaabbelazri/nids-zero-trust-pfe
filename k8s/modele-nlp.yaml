@@ -23,4 +23,4 @@ spec:
             - name: MODEL_NAME
               value: "NLP_SENTIMENT_ANALYSIS" # K8s charge le modèle NLP
           ports:
-            - containerPort: 5000
+            - containerPort: 8000

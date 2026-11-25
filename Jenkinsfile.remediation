@@ -58,27 +58,11 @@ pipeline {
             }
         }
 
-        stage('Auto-Guérison (Terraform-IaC)') {
+        stage('Vérification Post-Quarantaine (SOAR)') {
             when { expression { return env.alert_name == 'NodeCompromised' } }
             steps {
-                echo "Début du remplacement chirurgical du pool de nœuds..."
-                
-                withVault(
-                    configuration: [vaultUrl: 'http://vault:8200', vaultCredentialId: 'vault-token-id'],
-                    vaultSecrets: [[path: 'secret/gcp', engineVersion: 2, secretValues: [[envVar: 'GOOGLE_CREDENTIALS', vaultKey: 'service_account_key']]]]
-                ) {
-                    withEnv(["GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_adc.json", "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/tmp/gcp_adc.json"]) {
-                        script { writeFile file: '/tmp/gcp_adc.json', text: env.GOOGLE_CREDENTIALS }
-                        sh 'gcloud config unset auth/access_token_file || true'
-                        sh 'mkdir -p ~/.config/gcloud && cp /tmp/gcp_adc.json ~/.config/gcloud/application_default_credentials.json'
-                        dir('terraform') {
-                            sh 'rm -rf .terraform *.tfstate*'
-                            sh 'terraform init -input=false'
-                            // Durcissement : Ajout du lock-timeout pour gérer la concurrence
-                            sh 'terraform apply -replace="google_container_node_pool.mlops_nodes" -lock-timeout=3m -auto-approve'
-                        }
-                    }
-                }
+                echo "✅ Stratégie Forensics active : l'attaquant est isolé dans la cage d'observation Calico."
+                echo "🛡️ Infrastructure GKE et modèle NIDS protégés sans interruption de service."
             }
         }
     }

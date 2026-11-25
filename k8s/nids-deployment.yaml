@@ -28,7 +28,7 @@ spec:
           image: mossaabbelazri/nids-model:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 5000
+            - containerPort: 8000
           resources:
             limits:
               cpu: "500m"
@@ -50,4 +50,4 @@ spec:
     app: nids-ai
   ports:
     - port: 80
-      targetPort: 5000
+      targetPort: 8000

@@ -96,9 +96,9 @@ The architecture relies on **four security pillars** operating in-depth and a cl
 
 | Layer | Tool | Role |
 |:---|:---|:---|
-| **Artificial Intelligence** | XGBoost + MLflow | Binary classification NIDS model (Healthy/Attack) with model registry |
-| **Serving API** | FastAPI + Uvicorn | REST API exposing `/predict`, `/health`, and `/metrics` (Prometheus) |
-| **Containerization** | Docker | Immutable image with a non-root user (`appuser`) |
+| **Artificial Intelligence** | XGBoost + MLflow | Binary classification NIDS model (Healthy/Attack) + multi-model registry (NIDS, Fraud Detection, NLP Sentiment) |
+| **Serving API** | FastAPI + Uvicorn (port 8000) | REST API exposing `/predict`, `/health`, and `/metrics` (Prometheus) |
+| **Containerization** | Docker (Python 3.11) | Immutable image with a non-root user (`appuser`), Trivy-clean (0 CRITICAL CVEs) |
 | **CI/CD Orchestration** | Jenkins | Declarative multi-stage pipeline with security gates |
 | **SAST Scan** | SonarQube | Static Application Security Testing on the source code |
 | **Container CVE Scan** | Trivy (Aqua Security) | Detection of critical vulnerabilities in the Docker image |
@@ -128,10 +128,10 @@ nids-zero-trust-pfe/
 ├── .gitignore                     # Exclusion of sensitive files and Terraform states
 │
 ├── nids-app/                      # AI Application (NIDS Model)
-│   ├── main.py                    # FastAPI API (predict, health, Prometheus metrics)
-│   ├── Dockerfile                 # Secure Docker image (non-root)
-│   ├── requirements.txt           # Python dependencies
-│   └── .trivyignore               # Trivy exclusions
+│   ├── main.py                    # FastAPI API (predict, health, Prometheus metrics) — port 8000
+│   ├── Dockerfile                 # Secure Docker image (non-root, Python 3.11)
+│   ├── requirements.txt           # Python dependencies (mlflow, xgboost, pillow, certifi, uvicorn)
+│   └── .trivyignore               # Trivy exclusions (0 CRITICAL CVEs)
 │
 ├── locust/                        # Attack Simulation (Chaos Engineering)
 │   └── locustfile.py              # Layer 7 DDoS Script (Controlled HTTP Flood)
@@ -140,17 +140,18 @@ nids-zero-trust-pfe/
 │   └── main.tf                    # GKE Cluster + Shielded Nodes + GCS remote backend
 │
 ├── k8s/                           # Kubernetes Manifests
-│   ├── nids-deployment.yaml       # Deployment + Service (Vault + Cloud Armor annotations)
+│   ├── nids-deployment.yaml       # Deployment + Service (port 8000, Vault + Cloud Armor annotations)
 │   ├── nids-backendconfig.yaml    # Cloud Armor BackendConfig (WAF)
 │   ├── locust-attack.yaml         # Locust Deployment (isolated namespace, outside Istio mesh)
 │   ├── quarantine-networkpolicy.yaml # Calico Firewall (Forensics observation cage)
-│   ├── mlflow-deployment.yaml     # MLflow deployment on GKE
-│   ├── modele-fraude.yaml         # Fraud detection model
-│   └── modele-nlp.yaml            # NLP model
+│   ├── mlflow-deployment.yaml     # MLflow deployment on GKE (3-model registry)
+│   ├── modele-fraude.yaml         # Fraud detection model (port 8000)
+│   └── modele-nlp.yaml            # NLP Sentiment Analysis model (port 8000)
 │
-├── alertmanager.yml               # Alertmanager configuration (Jenkins webhook routing)
+├── alertmanager.yml               # Alertmanager configuration (Jenkins webhook routing via Ngrok)
 ├── prometheus-rules.yml           # Prometheus alert rules (NodeCompromised)
-└── prometheus-config.yaml         # PrometheusRule CRD for Kube-Prometheus Operator
+├── prometheus-config.yaml         # PrometheusRule CRD for Kube-Prometheus Operator
+└── register_mlflow_models.py      # Script to register all 3 AI models in MLflow Registry
 ```
 
 ---
@@ -174,11 +175,11 @@ The main pipeline executes **7 sequential stages** with security gates at every 
 | Stage | Name | Description |
 |:---|:---|:---|
 | 1 | Code Security (SAST) | SonarQube scan of the FastAPI code |
-| 2 | Containerization (Docker) | Immutable Docker image build |
-| 3 | Container Security (Trivy) | Scan for critical CVE vulnerabilities |
+| 2 | Containerization (Docker) | Immutable Docker image build (Python 3.11, port 8000) |
+| 3 | Container Security (Trivy) | Scan for critical CVE vulnerabilities (0 CRITICAL required) |
 | 4 | Infrastructure Security (tfsec) | Static analysis of Terraform code |
-| 5 | Zero-Trust Deployment (Vault + TF)| Secure retrieval of GCP secrets via Vault, GKE cluster provisioning |
-| 5.5 | NIDS Model Build & Push | Build and publish the Docker image on Docker Hub |
+| 5 | Zero-Trust Deployment (Vault + TF)| Secure retrieval of GCP secrets via Vault, GKE cluster provisioning (4 nodes, Calico enabled) |
+| 5.5 | NIDS Model Build & Push | Build and publish the Docker image on GCR |
 | 6 | Deployment on GKE | Istio installation (STRICT mTLS), K8s manifests deployment, monitoring ConfigMaps injection |
 
 ---
@@ -299,14 +300,38 @@ done
 
 **Expected Result**: All requests fail with `curl: (28) Failed to connect`. Istio's Zero-Trust architecture intercepts and rejects the attack at the TCP level because the intruder pod lacks a valid mTLS certificate.
 
-### Scenario B: MLOps Inference Validation (XGBoost)
+### Scenario B: MLOps Inference Validation (XGBoost — in-cluster Istio mTLS)
 
-Simulation of sending legitimate and malicious network flows to the inference API to validate the AI model:
+Simulation de l'envoi de flux réseau légitimes et malveillants vers l'API d'inférence **depuis l'intérieur du cluster GKE** (via `kubectl exec`) pour valider le modèle IA et le service Istio mTLS :
 
-1. **Health Check**: A call to the `/health` endpoint confirms that the XGBoost model is correctly loaded from MLflow.
-2. **Nominal Flow**: Sending a JSON vector representing standard HTTPS traffic (port 443). The API instantly returns `{"status": "Healthy", "action": "Allow"}`.
-3. **Malicious Flow**: Sending a vector representing an attack (e.g., 5000 packets sent, 0 received). The API identifies the anomaly, dynamically converts the data into `xgb.DMatrix`, exceeds the 0.5 threshold, and returns `{"status": "Attack", "action": "Block"}`.
-4. **Metrics Update**: The Prometheus `/metrics` counter automatically increments (`nids_intrusion_alerts_total = 1.0`).
+1. **Health Check** : Appel au endpoint `/health` confirmant le chargement correct du modèle XGBoost depuis MLflow (ou fallback sur l'artefact local embarqué).
+2. **Flux Nominal** : Envoi d'un vecteur JSON représentant du trafic HTTPS standard (port 443, `total_fwd_packets=2`). L'API retourne instantanément `{"status": "Healthy", "action": "Allow"}`.
+3. **Flux Malveillant** : Envoi d'un vecteur représentant une attaque DDoS (port 80, `flow_duration=999999`, `total_fwd_packets=5000`, `total_backward_packets=0`). L'API détecte l'anomalie et retourne `{"status": "Attack", "action": "Block"}`.
+4. **Mise à jour des métriques** : Le compteur Prometheus `/metrics` s'incrémente automatiquement (`nids_intrusion_alerts_total = 1.0`).
+
+```bash
+# Lancer un pod de test dans le cluster (Istio injecte le sidecar automatiquement)
+kubectl run nids-tester -n default --image=curlimages/curl -- sleep 3600
+kubectl wait --for=condition=Ready pod/nids-tester -n default --timeout=60s
+
+# Health Check
+kubectl exec -n default nids-tester -- curl -s http://nids-model-service.default.svc.cluster.local/health
+
+# Flux légitime → {"status": "Healthy", "action": "Allow"}
+kubectl exec -n default nids-tester -- curl -s -X POST \
+  http://nids-model-service.default.svc.cluster.local/predict \
+  -H "Content-Type: application/json" \
+  -d '{"destination_port": 443, "flow_duration": 150.0, "total_fwd_packets": 2, "total_backward_packets": 1}'
+
+# Flux d'attaque DDoS → {"status": "Attack", "action": "Block"}
+kubectl exec -n default nids-tester -- curl -s -X POST \
+  http://nids-model-service.default.svc.cluster.local/predict \
+  -H "Content-Type: application/json" \
+  -d '{"destination_port": 80, "flow_duration": 999999.0, "total_fwd_packets": 5000, "total_backward_packets": 0}'
+
+# Nettoyage
+kubectl delete pod nids-tester -n default
+```
 
 ### Scenario C: Organic Triggering of Auto-Remediation (Locust)
 
@@ -330,17 +355,31 @@ kubectl port-forward svc/locust-service -n attack-simulation 8089:8089
 
 ---
 
-## 📸 Screenshots and Results
+### Screenshots and Results
 
 ### NIDS API — OpenAPI Documentation (Swagger)
-> The FastAPI API exposes three essential endpoints for the Cloud-Native architecture: `/health`, `/predict`, and `/metrics`.
+> The FastAPI API exposes three essential endpoints for the Cloud-Native architecture: `/predict`, `/health`, and `/metrics` — running on port 8000.
 
 ![NIDS API Swagger](screens/apis.png)
 
 ---
 
+### Monitoring — AlertManager Overview
+> Alertmanager overview showing the `NodeCompromised` alert routing chain to the Jenkins webhook.
+
+![AlertManager Overview](screens/AlertManager%20overview.png)
+
+---
+
+### Monitoring — Grafana Overview
+> Grafana dashboard showing real-time CPU metrics per namespace before and after Locust DDoS attack.
+
+![Grafana Overview](screens/Grafana%20Overview.png)
+
+---
+
 ### MLOps Inference — Health Check
-> Preliminary validation confirming the correct loading of the XGBoost model in memory.
+> Preliminary validation confirming the correct loading of the XGBoost model in memory (loaded from MLflow registry — `models:/NIDS_XGBoost/Production`).
 
 ![Health Check](screens/health.png)
 
@@ -349,7 +388,7 @@ kubectl port-forward svc/locust-service -n attack-simulation 8089:8089
 ### MLOps Inference — Legitimate Flow (Healthy)
 > The model analyzes the packet characteristics and allows passage.
 
-![Healthy Flow](screens/sain.png)
+![Healthy Flow](screens/Sain.png)
 
 ---
 
@@ -367,10 +406,17 @@ kubectl port-forward svc/locust-service -n attack-simulation 8089:8089
 
 ---
 
-### Auto-Remediation — Forensic Isolation (CPU Panic)
-> Comparison of the attacker's CPU before and after applying the Calico NetworkPolicy. At the bottom, the runaway (panic) state proves complete isolation of the threat in the sandbox.
+### Auto-Remediation — CPU Quota Before Attack
+> Locust CPU usage before the Calico NetworkPolicy quarantine is applied.
 
-![Pod Auto-Remediation](screens/AutoRemediationPods.png)
+![CPU Before](screens/locust%20cpu%20quota%20before.png)
+
+---
+
+### Auto-Remediation — CPU Quota After Quarantine (Forensic Isolation)
+> Locust CPU in panic state after the Calico quarantine isolates all outbound traffic — the attacker is trapped in the sandbox.
+
+![CPU After](screens/locust%20cpu%20quota%20after.png)
 
 ---
 
